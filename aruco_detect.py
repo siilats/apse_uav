@@ -57,20 +57,20 @@ drawLines = True
 drawPoints = False
 
 #path to camera parameters file
-path_camera_params = "your_path" + "cam_params.json"
+path_camera_params = "data/" + "cam_params.json"
 
 #True if you use images as input, False if you use video
-useImages = False
+useImages = True
 #path to folder with input images
 #images inside must be named image_XXXX.png, where XXXX is the frame number
 if useImages:
-    path_input_images = "your_path"
+    path_input_images = "dynamic_images"
 
 #True if you use video as input, False if you you images
 useVideo = True
 #path to an input video (path + filename + extension)
 if useVideo:
-    path_input_video = "your_path"
+    path_input_video = "/Users/keithsiilats/Downloads/controltest.mp4"
 
 #path to data from DCNN detection, used only if useCentroidData is True (path + filename.csv)
 if useCentroidData:
@@ -188,7 +188,7 @@ def outputData(file):
 #FUNCTIONS FOR SETTING PARAMETERS
 
 def setArucoParameters():
-    parameters = aruco.DetectorParameters_create()
+    parameters = aruco.DetectorParameters()
     
     #set values for Aruco detection parameters
     parameters.minMarkerPerimeterRate = 0.01 #enables detection from higher altitude
@@ -260,11 +260,12 @@ def preprocessFrame(frame):
 
 def detectArucoMarkers(gray, parameters):
     #use predefined Aruco markers dictionary
-    aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
+    aruco_dict = aruco.Dictionary(aruco.DICT_4X4_50)
     
     #detect markers with APRILTAG method
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
-    corners, ids, rejected_img_points = aruco.detectMarkers(gray, aruco_dict, parameters=parameters, cameraMatrix=mtx, distCoeff=dist)
+
+    corners, ids, rejected_img_points = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
     return corners, ids
 
@@ -591,6 +592,8 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     #convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids = detectArucoMarkers(gray, parameters)
+    # write me adaptive grayscale in opencv
+
 
 #%%====================================
 #MARKER DETECTION AND POINTS CALCULATIONS
