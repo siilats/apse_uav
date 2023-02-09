@@ -10,10 +10,10 @@ from scipy.spatial.transform import Rotation as R
 #PARAMETERS TO BE CHANGED BY USER
 
 #index of first frame to be processed
-start_frame = 1
+start_frame = 1300
 #index of last frame to be processed, if None: all frames from input folder/input video folder will be processed
 #you can also terminate the processing immediately by press 'q' key
-stop_frame = None
+stop_frame = 1339
 #change the value if you want to skip some frames on the sequence
 step_frame = 1
 
@@ -67,7 +67,7 @@ if useImages:
     path_input_images = "dynamic_images"
 
 #True if you use video as input, False if you you images
-useVideo = True
+useVideo = False
 #path to an input video (path + filename + extension)
 if useVideo:
     path_input_video = "/Users/keithsiilats/Downloads/controltest.mp4"
@@ -260,8 +260,8 @@ def preprocessFrame(frame):
 
 def detectArucoMarkers(gray, parameters):
     #use predefined Aruco markers dictionary
-    aruco_dict = aruco.Dictionary(aruco.DICT_4X4_50)
-    
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+
     #detect markers with APRILTAG method
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
 
@@ -572,7 +572,7 @@ mapx, mapy = cv2.initUndistortRectifyMap(mtx, dist, None, mtx, (width, height), 
 while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     #read frame from image or video
     if useImages:
-        frame = cv2.imread(path_input_images + "image_%04d.png" % k)
+        frame = cv2.imread(path_input_images + "/image_%04d.png" % k)
     elif useVideo:
         ret, frame = video.read()
         if ret == False:
