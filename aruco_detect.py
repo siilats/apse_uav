@@ -38,7 +38,7 @@ drawMarkers = True
 #True if you want to draw axes of the markers on image, False otherwise
 drawMarkersAxes = False
 #True if you want to print pose and ID of the markers on image, False otherwise
-showDataOnImage = False
+showDataOnImage = True
 #True if you want to print distances between vehicles on image, False otherwise
 showDistancesOnImage = True
 
