@@ -86,6 +86,8 @@ if saveResults:
 if saveImages:
     path_output_images = "your_path"
 
+
+
 #%%====================================
 #FUNCTIONS FOR DATA INPUT/OUTPUT
 
@@ -264,8 +266,10 @@ def detectArucoMarkers(gray, parameters):
 
     #detect markers with APRILTAG method
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
+    detector = aruco.ArucoDetector(aruco_dict)
+    detector.setDetectorParameters(parameters)
 
-    corners, ids, rejected_img_points = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+    corners, ids, rejected_img_points = detector.detectMarkers(gray)
 
     return corners, ids
 
@@ -285,8 +289,9 @@ def getMarkerData(corners, rvec, cx_prev, cy_prev):
         diff = np.sqrt(np.power(cx_prev-cx,2) + np.power(cy_prev-cy,2)) * markerLength / msp
     else:
         diff = 0
-    
-    return abs(cx), abs(cy), msp, diff
+    r = R.from_rotvec(rvec)
+    ang = r.as_euler('zxy', degrees=True)[0]
+    return abs(cx), abs(cy), msp, diff, ang
 
 def calculateAverageMarkerSize(msp_avg, msp):
     #write last measured marker size into table
@@ -410,7 +415,7 @@ def drawBoundingBox(tvec, rvec, veh_dim, size_corr):
     alpha_v = np.arctan(tvec[1]/tvec[2])
     
     #calucalate yaw angle of the vehicle
-    r = R.from_rotvec(rvec[0])
+    r = R.from_rotvec(rvec)
     yaw = round(r.as_euler('zxy', degrees=True)[0],2)
     
     #based on yaw angle of the vehicle, alpha angles may be negative
@@ -492,7 +497,7 @@ def calculateDistance(lidar, aruco, bbox, markerLength, msp4, msp):
     
     return dist_aruco, dist_bbox
 
-def drawLinesOnImage(source, point, cx, cy, dist_aruco, dist_aruco_bbox, veh_id):
+def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, ang1=0, ang4=0):
     #draw the line from source of the measurement to the closest point of the vehicle
     cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(point[0]), int(point[1])), (0,255,255), 5)
     
@@ -504,7 +509,7 @@ def drawLinesOnImage(source, point, cx, cy, dist_aruco, dist_aruco_bbox, veh_id)
         
         #calculate angles and position and convert them to text
         dist_aruco = str(round(dist_aruco,1)) + ','
-        dist_aruco_bbox = str(round(dist_aruco_bbox,1)) + ' m'
+        angle = str(round(ang1 - ang4, 1)) + ' degrees'
         
         #calculate the position where the text will be placed on image
         position_red = tuple([int((source[0][0]+cx)/2-200), int((source[0][1]+cy)/2)-50])
@@ -512,7 +517,7 @@ def drawLinesOnImage(source, point, cx, cy, dist_aruco, dist_aruco_bbox, veh_id)
         
         #write the text onto the image
         cv2.putText(frame, dist_aruco, position_red, font, 3.0, (0, 0, 255), 6, cv2.LINE_AA)
-        cv2.putText(frame, dist_aruco_bbox, position_yellow, font, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
+        cv2.putText(frame, angle, position_yellow, font, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
 
 #%%====================================
 #ALGORITHM PARAMETERS (DO NOT CHANGE!) AND DATA READ
@@ -523,6 +528,12 @@ markerLength = markerLengthOrg #real size of the marker in metres, this value ch
 marker_div = 1.2 #correction for altitude estimation from marker
 div = 1.013 #additional correction for distance calculation (based on altitude test)
 DIFF_MAX = 2/3 * step_frame * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
+
+obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
+obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
+            [markerLength / 2, markerLength / 2, 0],
+            [markerLength / 2, -markerLength / 2, 0],
+            [-markerLength / 2, -markerLength / 2, 0]])
 
 if useCentroidData:
     centroid_data = readCentroidData(path_dcnn_data) #read centroid data from DCNN
@@ -597,17 +608,29 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
 
 #%%====================================
 #MARKER DETECTION AND POINTS CALCULATIONS
-
+    tvec = np.zeros((5,3))
+    rvec = np.zeros((5,3))
     #if any marker was detected
     if np.all(ids != None):
         #estimate pose of detected markers
-        rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
+
+        # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
         
         #iterate over all detected markers
         for i in range(len(ids)):
             #only markers with ID={1,2,3,4} are used at this moment
+            # rvectmp=rvec[i][0] #compartible w previous version
+            # tvectmp=tvec[i][0] #compartible w previous version
+            flag, rvecs, tvecs, r2 = cv2.solvePnPGeneric(
+                obj_points2, corners[i], mtx, dist,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE)
+            rvectmp = rvecs[0].ravel()
+            tvectmp = tvecs[0].ravel()
+            tvec[i] = tvectmp
+            rvec[i] = rvectmp
+
             if(ids[i][0] == 4): #vehicle 4 (host)
-                cx4, cy4, msp, diff4 = getMarkerData(corners[i][0], rvec[i][0], None if k == start_frame else cx4_prev, None if k == start_frame else cy4_prev) #get detected marker parameters
+                cx4, cy4, msp, diff4, ang4 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx4_prev, None if k == start_frame else cy4_prev) #get detected marker parameters
                 
                 if detected_ID_prev[3] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[3] = 1 #mark vehicle as detected 
@@ -617,35 +640,35 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     if drawMarkers:
                         cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
                     if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvec[i], tvec[i], markerLength)
+                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
                     if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvec[i][0], rvec[i][0], ids[i][0])
+                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
                     
                     detected_ID[3] = 1 #mark vehicle as detected
-                    altitude = tvec[i][0][2] #altitude info
+                    altitude = tvectmp[2] #altitude info
                     markerLength = markerLengthCorrection(altitude) #correction of original marker size based on altitude
                     altitude = altitude/marker_div #calculate real altitude
                     
                     size_corr4, msp4 = calculateAverageMarkerSize(msp4_avg, msp) #marker size averaging
-                    leds = detectAndDrawLEDs(gray, tvec[i][0], rvec[i], size_corr4, msp4, LEDs_threshold) #LEDs detection
+                    leds = detectAndDrawLEDs(gray, tvectmp, rvectmp, size_corr4, msp4, LEDs_threshold) #LEDs detection
                     
-                    imgpts_veh4 = centroidFromAruco(veh4_coords, tvec[i], rvec[i], size_corr4) #calculate centroid of the vehicle wrt. Aruco marker
-                    imgpts_veh4_lidar = centroidFromAruco(veh4_coords_lidar, tvec[i], rvec[i], size_corr4) #calculate Lidar's position wrt. Aruco marker
+                    imgpts_veh4 = centroidFromAruco(veh4_coords, tvectmp, rvectmp, size_corr4) #calculate centroid of the vehicle wrt. Aruco marker
+                    imgpts_veh4_lidar = centroidFromAruco(veh4_coords_lidar, tvectmp, rvectmp, size_corr4) #calculate Lidar's position wrt. Aruco marker
                     cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
                     
                     if useCentroidData:
                         imgpts_veh4_dcnn = centroidFromDCNN(centroid_data[k-1][1], centroid_data[k-1][2]) #calculate Aruco position wrt. vehicle centroid from DCNN
-                    veh4_dim = drawBoundingBox(tvec[i][0], rvec[i], veh4_dim, size_corr4) #draw bounding box of the vehicle
+                    veh4_dim = drawBoundingBox(tvectmp, rvectmp, veh4_dim, size_corr4) #draw bounding box of the vehicle
                 else: #detected marker is a FP, change its ID to incorrect value
                     ids[i][0] = -1
             
             if([4] not in ids): #if host is not detected, use altitude data from another marker
-                altitude = tvec[i][0][2] #altitude info
+                altitude = tvectmp[2] #altitude info
                 markerLength = markerLengthCorrection(altitude) #correction of original marker size based on altitude
                 altitude = altitude/marker_div #calculate real altitude
             
             if(ids[i][0] == 1): #vehicle 1
-                cx1, cy1, msp, diff1 = getMarkerData(corners[i][0], rvec[i][0], None if k == start_frame else cx1_prev, None if k == start_frame else cy1_prev) #get detected marker parameters
+                cx1, cy1, msp, diff1, ang1 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx1_prev, None if k == start_frame else cy1_prev) #get detected marker parameters
                 
                 if detected_ID_prev[0] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[0] = 1 #mark vehicle as detected
@@ -655,24 +678,24 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     if drawMarkers:
                         cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
                     if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvec[i], tvec[i], markerLength)
+                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
                     if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvec[i][0], rvec[i][0], ids[i][0])
+                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
                     
                     detected_ID[0] = 1 #mark vehicle as detected
                     size_corr1, msp1 = calculateAverageMarkerSize(msp1_avg, msp) #marker size averaging
-                    imgpts_veh1 = centroidFromAruco(veh1_coords, tvec[i], rvec[i], size_corr1) #calculate centroid of the vehicle wrt. Aruco marker
+                    imgpts_veh1 = centroidFromAruco(veh1_coords, tvectmp, rvectmp, size_corr1) #calculate centroid of the vehicle wrt. Aruco marker
                     cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
                     
                     if useCentroidData:
                         imgpts_veh1_dcnn = centroidFromDCNN(centroid_data[k-1][5], centroid_data[k-1][6]) #calculate Aruco position wrt. vehicle centroid from DCNN
                         imgpts_veh1_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][7], centroid_data[k-1][8]) #calculate closest point of the vehicle from DCNN
-                    veh1_dim = drawBoundingBox(tvec[i][0], rvec[i], veh1_dim, size_corr1) #draw bounding box of the vehicle
+                    veh1_dim = drawBoundingBox(tvectmp, rvectmp, veh1_dim, size_corr1) #draw bounding box of the vehicle
                 else: #detected marker is a FP, change its ID to incorrect value
                     ids[i][0] = -1
                 
             if(ids[i][0] == 2): #vehicle 2
-                cx2, cy2, msp, diff2 = getMarkerData(corners[i][0], rvec[i][0], None if k == start_frame else cx2_prev, None if k == start_frame else cy2_prev) #get detected marker parameters
+                cx2, cy2, msp, diff2, ang2 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx2_prev, None if k == start_frame else cy2_prev) #get detected marker parameters
                 
                 if detected_ID_prev[1] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[1] = 1 #mark vehicle as detected
@@ -682,24 +705,24 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     if drawMarkers:
                         cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
                     if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvec[i], tvec[i], markerLength)
+                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
                     if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvec[i][0], rvec[i][0], ids[i][0])
+                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
                     
                     detected_ID[1] = 1 #mark vehicle as detected
                     size_corr2, msp2 = calculateAverageMarkerSize(msp2_avg, msp) #marker size averaging
-                    imgpts_veh2 = centroidFromAruco(veh2_coords, tvec[i], rvec[i], size_corr2) #calculate centroid of the vehicle wrt. Aruco marker
+                    imgpts_veh2 = centroidFromAruco(veh2_coords, tvectmp, rvectmp, size_corr2) #calculate centroid of the vehicle wrt. Aruco marker
                     cx2_prev, cy2_prev = cx2, cy2 #save position of the marker in the image
                     
                     if useCentroidData:
                         imgpts_veh2_dcnn = centroidFromDCNN(centroid_data[k-1][9], centroid_data[k-1][10]) #calculate Aruco position wrt. vehicle centroid from DCNN
                         imgpts_veh2_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][11], centroid_data[k-1][12]) #calculate closest point of the vehicle from DCNN
-                    veh2_dim = drawBoundingBox(tvec[i][0], rvec[i], veh2_dim, size_corr2) #draw bounding box of the vehicle
+                    veh2_dim = drawBoundingBox(tvectmp, rvectmp, veh2_dim, size_corr2) #draw bounding box of the vehicle
                 else: #detected marker is a FP, change its ID to incorrect value
                     ids[i][0] = -1
             
             if(ids[i][0] == 3): #vehicle 3
-                cx3, cy3, msp, diff3 = getMarkerData(corners[i][0], rvec[i][0], None if k == start_frame else cx3_prev, None if k == start_frame else cy3_prev) #get detected marker parameters
+                cx3, cy3, msp, diff3, ang3 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx3_prev, None if k == start_frame else cy3_prev) #get detected marker parameters
                 
                 if detected_ID_prev[2] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[2] = 1 #mark vehicle as detected 
@@ -709,19 +732,19 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     if drawMarkers:
                         cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
                     if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvec[i], tvec[i], markerLength)
+                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
                     if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvec[i][0], rvec[i][0], ids[i][0])
+                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
                     
                     detected_ID[2] = 1 #mark vehicle as detected
                     size_corr3, msp3 = calculateAverageMarkerSize(msp3_avg, msp) #marker size averaging
-                    imgpts_veh3 = centroidFromAruco(veh3_coords, tvec[i], rvec[i], size_corr3) #calculate centroid of the vehicle wrt. Aruco marker
+                    imgpts_veh3 = centroidFromAruco(veh3_coords, tvectmp, rvectmp, size_corr3) #calculate centroid of the vehicle wrt. Aruco marker
                     cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
                     
                     if useCentroidData:
                         imgpts_veh3_dcnn = centroidFromDCNN(centroid_data[k-1][13], centroid_data[k-1][14]) #calculate Aruco position wrt. vehicle centroid from DCNN
                         imgpts_veh3_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][15], centroid_data[k-1][16]) #calculate closest point of the vehicle from DCNN
-                    veh3_dim = drawBoundingBox(tvec[i][0], rvec[i], veh3_dim, size_corr3) #draw bounding box of the vehicle
+                    veh3_dim = drawBoundingBox(tvectmp, rvectmp, veh3_dim, size_corr3) #draw bounding box of the vehicle
                 else: #detected marker is a FP, change its ID to incorrect value
                     ids[i][0] = -1
 
@@ -746,7 +769,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                                 point = findMinimumDistanceBoundingBox(np.float32([[cx4, cy4]]), bbox, tvec[j], rvec[j], size_corr1) #find the closest point of the bbox from host's Aruco
                                 dist_veh1_aruco, dist_veh1_aruco_bbox = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx1, cy1]]), [point], markerLength, msp4, msp1) #calculate distances in metres for Aruco method
                                 if drawLines:
-                                    drawLinesOnImage(np.float32([[cx4, cy4]]), point, cx1, cy1, dist_veh1_aruco, dist_veh1_aruco_bbox, ids[j][0]) #draw lines between host's Aruco and vehicle
+                                    drawLinesOnImage(np.float32([[cx4, cy4]]), point, cx1, cy1, dist_veh1_aruco, dist_veh1_aruco_bbox, ids[j][0], ang1, ang4) #draw lines between host's Aruco and vehicle
                             if useCentroidData:
                                 dist_veh1_dcnn, dist_veh1_dcnn_bbox = calculateDistance(imgpts_veh4_lidar, imgpts_veh1_dcnn, imgpts_veh1_dcnn_bbox, markerLength, msp4, msp1) #calculate distances in metres for DCNN method
                     
@@ -757,7 +780,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                                 point = findMinimumDistanceBoundingBox(imgpts_veh4_lidar, bbox, tvec[j], rvec[j], size_corr2) #find the closest point of the bbox from Lidar
                                 dist_veh2_aruco, dist_veh2_aruco_bbox = calculateDistance(imgpts_veh4_lidar, np.float32([[cx2, cy2]]), [point], markerLength, msp4, msp2) #calculate distances in metres for Aruco method
                                 if drawLines:
-                                    drawLinesOnImage(imgpts_veh4_lidar, point, cx2, cy2, dist_veh2_aruco, dist_veh2_aruco_bbox, ids[j][0]) #draw lines between Lidar and vehicle
+                                    drawLinesOnImage(imgpts_veh4_lidar, point, cx2, cy2, dist_veh2_aruco, dist_veh2_aruco_bbox, ids[j][0], ang2, ang4) #draw lines between Lidar and vehicle
                             else:
                                 point = findMinimumDistanceBoundingBox(np.float32([[cx4, cy4]]), bbox, tvec[j], rvec[j], size_corr2) #find the closest point of the bbox from host's Aruco
                                 dist_veh2_aruco, dist_veh2_aruco_bbox = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx2, cy2]]), [point], markerLength, msp4, msp2) #calculate distances in metres for Aruco method
@@ -778,7 +801,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                                 point = findMinimumDistanceBoundingBox(np.float32([[cx4, cy4]]), bbox, tvec[j], rvec[j], size_corr3) #find the closest point of the bbox from host's Aruco
                                 dist_veh3_aruco, dist_veh3_aruco_bbox = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx3, cy3]]), [point], markerLength, msp4, msp3) #calculate distances in metres for Aruco method
                                 if drawLines:
-                                    drawLinesOnImage(np.float32([[cx4, cy4]]), point, cx3, cy3, dist_veh3_aruco, dist_veh3_aruco_bbox, ids[j][0]) #draw lines between host's Aruco and vehicle
+                                    drawLinesOnImage(np.float32([[cx4, cy4]]), point, cx3, cy3, dist_veh3_aruco, dist_veh3_aruco_bbox, ids[j][0], ang3, ang4) #draw lines between host's Aruco and vehicle
                             if useCentroidData:
                                 dist_veh3_dcnn, dist_veh3_dcnn_bbox = calculateDistance(imgpts_veh4_lidar, imgpts_veh3_dcnn, imgpts_veh3_dcnn_bbox, markerLength, msp4, msp3) #calculate distances in metres for DCNN method
                     
