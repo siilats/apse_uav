@@ -22,7 +22,7 @@ print('Program started')
 client = RemoteAPIClient()
 sim = client.getObject('sim')
 
-visionSensorHandle = sim.getObject('/VisionSensor')
+visionSensorHandle = sim.getObject('/Vision_sensor')
 passiveVisionSensorHandle = sim.getObject('/PassiveVisionSensor')
 
 # When simulation is not running, ZMQ message handling could be a bit
