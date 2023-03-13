@@ -5,6 +5,33 @@ import json
 import csv
 import os
 from scipy.spatial.transform import Rotation as R
+from zmqRemoteApi import RemoteAPIClient
+
+use_coppelia_sim = True
+camera_location = None
+
+
+if use_coppelia_sim:
+    client = RemoteAPIClient()
+    sim = client.getObject('sim')
+
+    visionSensorHandle = sim.getObject('/Vision_sensor')
+
+    markers = []
+    for i in range(4):
+        markers.append(sim.getObject('/marker_' + str(i)))
+
+    baseBoard = markers[0]
+    yokeBoard = markers[3]
+
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
+    # Run a simulation in stepping mode:
+    client.setStepping(True)
+    sim.startSimulation()
+
+    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
+
 
 #%%====================================
 #PARAMETERS TO BE CHANGED BY USER
@@ -313,14 +340,50 @@ def markerLengthCorrection(altitude):
     #use correction of marker size based on current altitude
     return markerLengthOrg * (1 - 0.00057 * altitude/marker_div) / div
 
+height_to_subtract = 0
+
 def printDataOnImage(corners, tvec, rvec, ids):
+    global height_to_subtract
+    global camera_location
+    global visionSensorHandle
+    global baseBoard
     font = cv2.FONT_HERSHEY_SIMPLEX
     r = R.from_rotvec(rvec)    
     
     #calculate real altitude to be printed
     tvec_temp = tvec.copy()
     tvec_temp[2] = tvec_temp[2]/marker_div
-    
+    if use_coppelia_sim:
+        if ids == 1:#matches the base_board marker
+            #move camera to -tvec_temp
+            camera_location = tvec_temp
+            height_to_subtract = camera_location[2]
+            #print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
+            #print("Camera location: ", camera_location)
+            sim.setObjectPosition(visionSensorHandle, -1, camera_location.tolist())
+
+            #mtx is 3x3 rotation matrix, apply it on vision_sensor_matrix
+            tvec_temp[2] = tvec_temp[2] - height_to_subtract
+            sim.setObjectPosition(baseBoard, -1, (tvec_temp).tolist())
+
+            rvec_t = sim.getObjectOrientation(baseBoard, -1)
+            #set object orientation to vector rvec
+            sim.setObjectOrientation(baseBoard, -1, r.as_euler('zxy', degrees=True).tolist())
+            rvec_t = sim.getObjectOrientation(baseBoard, -1)
+            sim.setObjectOrientation(baseBoard, -1, rvec.tolist())
+            rvec_t = sim.getObjectOrientation(baseBoard, -1)
+            print("rvec: ", rvec)
+        elif ids == 4 and camera_location is not None:
+            #move the yoke marker
+            tvec_temp[2] = tvec_temp[2] - height_to_subtract
+            sim.setObjectPosition(yokeBoard, -1, ( ( tvec_temp)).tolist())
+            print("moved yokeBoard")
+        else:
+            tvec_temp[2] = tvec_temp[2] - height_to_subtract
+            sim.setObjectPosition(markers[ids-1], -1, ((tvec_temp)).tolist())
+        print(f"moved marker id {ids - 1} to {tvec_temp}")
+        sim.addLog(sim.verbosity_scriptinfos, f"id={ids}, tvec={tvec_temp}, camera_location={camera_location}")
+        client.step()  # triggers next simulation step
     #calculate angles and position and convert them to text
     ang = 'R = ' + str([round(r.as_euler('zxy', degrees=True)[0],2),
                         round(r.as_euler('zxy', degrees=True)[1],2),
@@ -604,6 +667,9 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids = detectArucoMarkers(gray, parameters)
     # write me adaptive grayscale in opencv
+    idx = np.argsort(ids.ravel())
+    corners = tuple(np.array(corners)[idx])
+    ids = ids[idx]
 
 
 #%%====================================
@@ -843,3 +909,9 @@ if useVideo:
 
 if showImage:
     cv2.destroyAllWindows()
+
+if use_coppelia_sim:
+    sim.stopSimulation()
+
+    # Restore the original idle loop frequency:
+    sim.setInt32Param(sim.intparam_idle_fps, defaultIdleFps)
