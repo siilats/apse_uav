@@ -22,8 +22,8 @@ print('Program started')
 client = RemoteAPIClient()
 sim = client.getObject('sim')
 
-visionSensorHandle = sim.getObject('/VisionSensor')
-passiveVisionSensorHandle = sim.getObject('/PassiveVisionSensor')
+visionSensorHandle = sim.getObject('/Vision_sensor')
+# passiveVisionSensorHandle = sim.getObject('/PassiveVisionSensor')
 
 # When simulation is not running, ZMQ message handling could be a bit
 # slow, since the idle loop runs at 8 Hz by default. So let's make
@@ -42,8 +42,8 @@ while (t := sim.getSimulationTime()) < 3:
     #img = np.frombuffer(img, dtype=np.uint8)
     img = img[:, :, np.newaxis]
     img = np.tile(img, (1, 1, 3))
-    img = img.ravel()
-    img = img.tobytes()
+    # img = img.ravel()
+    # img = img.tobytes()
 
     # In CoppeliaSim images are left to right (x-axis), and bottom to top (y-axis)
     # (consistent with the axes of vision sensors, pointing Z outwards, Y up)
@@ -57,9 +57,9 @@ while (t := sim.getSimulationTime()) < 3:
     # img = img.reshape(resY*resX*3)
     # img = img.tobytes()
 
-    sim.setVisionSensorCharImage(passiveVisionSensorHandle, img)
+    # sim.setVisionSensorCharImage(passiveVisionSensorHandle, img)
 
-    #cv2.imshow('', img)
+    cv2.imshow('captured_img', img)
     cv2.waitKey(1)
     client.step()  # triggers next simulation step
 
