@@ -7,40 +7,30 @@ import os
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 
+
+# Define the codec and create a VideoWriter object
+fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Use this for MP4 file
+fps = 30.0
+output_filename = 'output.mp4'
+height, width = 2160, 3840
+out = cv2.VideoWriter(output_filename, fourcc, fps, (width, height))
+img_counter = 0
+
 use_coppelia_sim = True
 camera_location = None
-
-
-if use_coppelia_sim:
-    client = RemoteAPIClient()
-    sim = client.getObject('sim')
-
-    visionSensorHandle = sim.getObject('/Vision_sensor')
-
-    markers = []
-    for i in range(4):
-        markers.append(sim.getObject('/marker_' + str(i)))
-
-    baseBoard = markers[0]
-    yokeBoard = markers[3]
-
-    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
-    sim.setInt32Param(sim.intparam_idle_fps, 0)
-    # Run a simulation in stepping mode:
-    client.setStepping(True)
-    sim.startSimulation()
-
-    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
-
+baseBoard_orientation = None
+floor_level = 0.01 #floor level in meters
 
 #%%====================================
 #PARAMETERS TO BE CHANGED BY USER
 
 #index of first frame to be processed
-start_frame = 1300
+#start_frame = 1300
+start_frame = 1
 #index of last frame to be processed, if None: all frames from input folder/input video folder will be processed
 #you can also terminate the processing immediately by press 'q' key
-stop_frame = 1339
+#stop_frame = 1339
+stop_frame = start_frame + 39
 #change the value if you want to skip some frames on the sequence
 step_frame = 1
 
@@ -94,10 +84,10 @@ if useImages:
     path_input_images = "dynamic_images"
 
 #True if you use video as input, False if you you images
-useVideo = False
+useVideo = not useImages
 #path to an input video (path + filename + extension)
 if useVideo:
-    path_input_video = "/Users/keithsiilats/Downloads/controltest.mp4"
+    path_input_video = "coppeliasim_video.mp4"
 
 #path to data from DCNN detection, used only if useCentroidData is True (path + filename.csv)
 if useCentroidData:
@@ -112,6 +102,67 @@ if saveResults:
 #path must lead to an existing folder!
 if saveImages:
     path_output_images = "your_path"
+
+
+
+height, width = 2160, 3840 #fixed input image/video resolution
+markerLengthOrg = 0.55 #real size of the marker in metres, this value does not change in algorithm
+markerLength = markerLengthOrg #real size of the marker in metres, this value changes in algorithm
+marker_div = 1.2 #correction for altitude estimation from marker
+div = 1.013 #additional correction for distance calculation (based on altitude test)
+DIFF_MAX = 2/3 * step_frame * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
+
+obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
+obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
+            [markerLength / 2, markerLength / 2, 0],
+            [markerLength / 2, -markerLength / 2, 0],
+            [-markerLength / 2, -markerLength / 2, 0]])
+
+
+if use_coppelia_sim:
+    client = RemoteAPIClient()
+    sim = client.getObject('sim')
+    sim.stopSimulation()
+
+    visionSensorHandle = sim.getObject('/Vision_sensor')
+
+    baseBoard = sim.getObject('/baseBoard')
+    yokeBoard = sim.getObject('/yokeBoard')
+
+    sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
+    sim.setObjectOrientation(baseBoard, -1, [180/360*2*3.1415, 0, 0])
+    sim.setObjectPosition(yokeBoard, -1, [0.2, 0, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, 0])
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    #underneath_orientation = [0, 0, 180/360*2*-3.14159]
+    above_orientation = [-180/360*2*3.1415, 0, 180/360*2*3.1415]
+    #sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
+    #alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
+    sim.setObjectOrientation(visionSensorHandle, -1, above_orientation)
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 0.5])
+
+    #get shapebb
+    shapebb = sim.getShapeBB(baseBoard)
+    shapebb_yoke = sim.getShapeBB(yokeBoard)
+    coppeliasize = shapebb[0]
+    targetsize = markerLengthOrg/100
+    #set object scale
+    #sim.scaleObject(baseBoard, targetsize/coppeliasize, targetsize/coppeliasize, targetsize/coppeliasize)
+    #sim.scaleObject(yokeBoard, targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0])
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
+
+    #sim.handleVisionSensor(visionSensorHandle)
+
+    # Run a simulation in stepping mode:
+    client.setStepping(True)
+
+    sim.startSimulation()
+
+    client.step()
+
+    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
 
 
 
@@ -353,37 +404,7 @@ def printDataOnImage(corners, tvec, rvec, ids):
     #calculate real altitude to be printed
     tvec_temp = tvec.copy()
     tvec_temp[2] = tvec_temp[2]/marker_div
-    if use_coppelia_sim:
-        if ids == 1:#matches the base_board marker
-            #move camera to -tvec_temp
-            camera_location = tvec_temp
-            height_to_subtract = camera_location[2]
-            #print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
-            #print("Camera location: ", camera_location)
-            sim.setObjectPosition(visionSensorHandle, -1, camera_location.tolist())
 
-            #mtx is 3x3 rotation matrix, apply it on vision_sensor_matrix
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(baseBoard, -1, (tvec_temp).tolist())
-
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            #set object orientation to vector rvec
-            sim.setObjectOrientation(baseBoard, -1, r.as_euler('zxy', degrees=True).tolist())
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            sim.setObjectOrientation(baseBoard, -1, rvec.tolist())
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            print("rvec: ", rvec)
-        elif ids == 4 and camera_location is not None:
-            #move the yoke marker
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(yokeBoard, -1, ( ( tvec_temp)).tolist())
-            print("moved yokeBoard")
-        else:
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(markers[ids-1], -1, ((tvec_temp)).tolist())
-        print(f"moved marker id {ids - 1} to {tvec_temp}")
-        sim.addLog(sim.verbosity_scriptinfos, f"id={ids}, tvec={tvec_temp}, camera_location={camera_location}")
-        client.step()  # triggers next simulation step
     #calculate angles and position and convert them to text
     ang = 'R = ' + str([round(r.as_euler('zxy', degrees=True)[0],2),
                         round(r.as_euler('zxy', degrees=True)[1],2),
@@ -585,18 +606,6 @@ def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, ang1=0, a
 #%%====================================
 #ALGORITHM PARAMETERS (DO NOT CHANGE!) AND DATA READ
 
-height, width = 2160, 3840 #fixed input image/video resolution
-markerLengthOrg = 0.55 #real size of the marker in metres, this value does not change in algorithm
-markerLength = markerLengthOrg #real size of the marker in metres, this value changes in algorithm
-marker_div = 1.2 #correction for altitude estimation from marker
-div = 1.013 #additional correction for distance calculation (based on altitude test)
-DIFF_MAX = 2/3 * step_frame * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
-
-obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
-obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
-            [markerLength / 2, markerLength / 2, 0],
-            [markerLength / 2, -markerLength / 2, 0],
-            [-markerLength / 2, -markerLength / 2, 0]])
 
 if useCentroidData:
     centroid_data = readCentroidData(path_dcnn_data) #read centroid data from DCNN
@@ -697,6 +706,42 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
 
             if(ids[i][0] == 4): #vehicle 4 (host)
                 cx4, cy4, msp, diff4, ang4 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx4_prev, None if k == start_frame else cy4_prev) #get detected marker parameters
+
+                if use_coppelia_sim and camera_location is not None:
+                    # move the yoke marker
+                    tvectmp_cp = tvectmp.copy()/100 - camera_location
+                    tvectmp_cp[2] = floor_level
+
+                    #tvectmp_cp[1] = -tvectmp_cp[1]
+                    sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[1], tvectmp_cp[2]])
+                    print("moved yokeBoard", tvectmp_cp.tolist())
+
+                    r4 = R.from_rotvec(rvectmp)
+                    #rvectmp[1] = -rvectmp[1]
+                    ang4 = r4.as_euler('zxy', degrees=True)[0]
+
+                    #we have -90 and then angle4 is 120 and we want answe 45
+                    sim.setObjectOrientation(yokeBoard, -1, [0, 0, (baseBoard_orientation+ang4)/360*2*3.1415])
+                    #sim.setObjectOrientation(yokeBoard, -1, ((r1.as_euler('zxy', degrees=True) - r4.as_euler('zxy', degrees=True))/ 360 * 2 * 3.1415).tolist())
+                    #sim.handleVisionSensor(visionSensorHandle)
+                    client.step()
+
+                    img, resX, resY = sim.getVisionSensorCharImage(visionSensorHandle)
+                    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+                    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+                    #img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+
+                    cv2.imshow('CoppeliaSim', img)
+
+                    out.write(img)
+                    #create image name with img_counter padded with zeros
+
+                    img_name = "{}.png".format(img_counter).zfill(10)
+                    img_counter += 1
+                    #save image
+                    cv2.imwrite("test_video/" + img_name, img)
+
                 
                 if detected_ID_prev[3] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[3] = 1 #mark vehicle as detected 
@@ -735,10 +780,24 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
             
             if(ids[i][0] == 1): #vehicle 1
                 cx1, cy1, msp, diff1, ang1 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx1_prev, None if k == start_frame else cy1_prev) #get detected marker parameters
-                
+
+                if use_coppelia_sim:
+                    camera_orientation = rvectmp.copy()
+                    camera_location = tvectmp / 100
+
                 if detected_ID_prev[0] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[0] = 1 #mark vehicle as detected
                     cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
+
+                    if use_coppelia_sim:
+                        r1 = R.from_rotvec(camera_orientation)
+                        baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                        camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
+                        # print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
+                        # print("Camera location: ", camera_location)
+                        sim.setObjectPosition(visionSensorHandle, -1, camera_location_coppelia)
+                        #sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
+
                     
                 if (detected_ID_prev[0] == 1 and diff1 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
                     if drawMarkers:
@@ -789,7 +848,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
             
             if(ids[i][0] == 3): #vehicle 3
                 cx3, cy3, msp, diff3, ang3 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx3_prev, None if k == start_frame else cy3_prev) #get detected marker parameters
-                
+
                 if detected_ID_prev[2] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[2] = 1 #mark vehicle as detected 
                     cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
@@ -813,6 +872,15 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     veh3_dim = drawBoundingBox(tvectmp, rvectmp, veh3_dim, size_corr3) #draw bounding box of the vehicle
                 else: #detected marker is a FP, change its ID to incorrect value
                     ids[i][0] = -1
+
+            if use_coppelia_sim:
+                client.step()
+                img, resX, resY = sim.getVisionSensorCharImage(visionSensorHandle)
+                img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                cv2.imshow('CoppeliaSim', img)
+                # triggers next simulation step
+                out.write(img)
 
 #%%====================================
 #DISTANCE CALCULATION FOR VEHICLES
@@ -879,6 +947,8 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     #show results on image
     if showImage:
         cv2.namedWindow("Detection result", cv2.WINDOW_NORMAL)
+        #resize image to fit screen
+        cv2.resizeWindow("Detection result", 1280, 720)
         cv2.imshow("Detection result", frame)
         if cv2.waitKey(cv2waitKeyVal) & 0xFF == ord('q'):
             break
@@ -915,3 +985,5 @@ if use_coppelia_sim:
 
     # Restore the original idle loop frequency:
     sim.setInt32Param(sim.intparam_idle_fps, defaultIdleFps)
+
+out.release()
