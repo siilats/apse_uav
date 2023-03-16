@@ -7,26 +7,33 @@ import os
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 
-
-# Define the codec and create a VideoWriter object
-fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Use this for MP4 file
-fps = 30.0
-output_filename = 'output.mp4'
-height, width = 2160, 3840
-out = cv2.VideoWriter(output_filename, fourcc, fps, (width, height))
 img_counter = 0
 
+use_coppelia_video = True
 use_coppelia_sim = True
 camera_location = None
 baseBoard_orientation = None
 floor_level = 0.01 #floor level in meters
 
+#True if you use images as input, False if you use video
+useImages = False
+#path to folder with input images
+#images inside must be named image_XXXX.png, where XXXX is the frame number
+if useImages:
+    path_input_images = "dynamic_images"
+
+#True if you use video as input, False if you you images
+useVideo = not useImages
+#path to an input video (path + filename + extension)
+if useVideo:
+    path_input_video = "coppeliasim_video.mp4" if use_coppelia_video else "car_video.avi"
+
+
 #%%====================================
 #PARAMETERS TO BE CHANGED BY USER
 
 #index of first frame to be processed
-#start_frame = 1300
-start_frame = 1
+start_frame = 1300 if not use_coppelia_video else 1
 #index of last frame to be processed, if None: all frames from input folder/input video folder will be processed
 #you can also terminate the processing immediately by press 'q' key
 #stop_frame = 1339
@@ -74,20 +81,7 @@ drawLines = True
 drawPoints = False
 
 #path to camera parameters file
-path_camera_params = "data/" + "cam_params.json"
-
-#True if you use images as input, False if you use video
-useImages = True
-#path to folder with input images
-#images inside must be named image_XXXX.png, where XXXX is the frame number
-if useImages:
-    path_input_images = "dynamic_images"
-
-#True if you use video as input, False if you you images
-useVideo = not useImages
-#path to an input video (path + filename + extension)
-if useVideo:
-    path_input_video = "coppeliasim_video.mp4"
+path_camera_params = "data/" + "cam_params.json"# if not use_coppelia_video else "data/" + "coppeliasim_cam_params.json"
 
 #path to data from DCNN detection, used only if useCentroidData is True (path + filename.csv)
 if useCentroidData:
@@ -130,9 +124,9 @@ if use_coppelia_sim:
     yokeBoard = sim.getObject('/yokeBoard')
 
     sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
-    sim.setObjectOrientation(baseBoard, -1, [180/360*2*3.1415, 0, 0])
-    sim.setObjectPosition(yokeBoard, -1, [0.2, 0, floor_level])
-    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, 0])
+    sim.setObjectOrientation(baseBoard, -1, [180/360*2*3.1415, 0, -90/360*2*3.1415])
+    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, 60/360*2*3.1415])
     orientation = sim.getObjectOrientation(visionSensorHandle, -1)
     #underneath_orientation = [0, 0, 180/360*2*-3.14159]
     above_orientation = [-180/360*2*3.1415, 0, 180/360*2*3.1415]
@@ -140,7 +134,7 @@ if use_coppelia_sim:
     #alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
     sim.setObjectOrientation(visionSensorHandle, -1, above_orientation)
     orientation = sim.getObjectOrientation(visionSensorHandle, -1)
-    sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 0.5])
+    sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 50])
 
     #get shapebb
     shapebb = sim.getShapeBB(baseBoard)
@@ -669,8 +663,9 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     veh2_dim = [-1.68, 2.86, -0.87, 0.87]
     veh3_dim = [-1.32, 2.48, -0.86, 0.86]    
 
-    #frame preprocessing - camera distortion removal and gamma correction
-    frame = preprocessFrame(frame)
+    if not use_coppelia_video:
+        #frame preprocessing - camera distortion removal and gamma correction
+        frame = preprocessFrame(frame)
 
     #convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -709,7 +704,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
 
                 if use_coppelia_sim and camera_location is not None:
                     # move the yoke marker
-                    tvectmp_cp = tvectmp.copy()/100 - camera_location
+                    tvectmp_cp = tvectmp.copy() - camera_location
                     tvectmp_cp[2] = floor_level
 
                     #tvectmp_cp[1] = -tvectmp_cp[1]
@@ -719,9 +714,11 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     r4 = R.from_rotvec(rvectmp)
                     #rvectmp[1] = -rvectmp[1]
                     ang4 = r4.as_euler('zxy', degrees=True)[0]
+                    correction = -90 - baseBoard_orientation #-7
+                    final_angle = 180 - ang4 + correction
 
                     #we have -90 and then angle4 is 120 and we want answe 45
-                    sim.setObjectOrientation(yokeBoard, -1, [0, 0, (baseBoard_orientation+ang4)/360*2*3.1415])
+                    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, final_angle/360*2*3.1415])
                     #sim.setObjectOrientation(yokeBoard, -1, ((r1.as_euler('zxy', degrees=True) - r4.as_euler('zxy', degrees=True))/ 360 * 2 * 3.1415).tolist())
                     #sim.handleVisionSensor(visionSensorHandle)
                     client.step()
@@ -731,16 +728,14 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
                     #img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-
-                    cv2.imshow('CoppeliaSim', img)
-
-                    out.write(img)
                     #create image name with img_counter padded with zeros
 
-                    img_name = "{}.png".format(img_counter).zfill(10)
+                    img_name = "image_{}.png".format(start_frame + img_counter)
                     img_counter += 1
                     #save image
+                    corners_t, ids_t = detectArucoMarkers(img, parameters)
                     cv2.imwrite("test_video/" + img_name, img)
+
 
                 
                 if detected_ID_prev[3] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
@@ -783,7 +778,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
 
                 if use_coppelia_sim:
                     camera_orientation = rvectmp.copy()
-                    camera_location = tvectmp / 100
+                    camera_location = tvectmp
 
                 if detected_ID_prev[0] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
                     detected_ID[0] = 1 #mark vehicle as detected
@@ -875,12 +870,6 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
 
             if use_coppelia_sim:
                 client.step()
-                img, resX, resY = sim.getVisionSensorCharImage(visionSensorHandle)
-                img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                cv2.imshow('CoppeliaSim', img)
-                # triggers next simulation step
-                out.write(img)
 
 #%%====================================
 #DISTANCE CALCULATION FOR VEHICLES
@@ -985,5 +974,3 @@ if use_coppelia_sim:
 
     # Restore the original idle loop frequency:
     sim.setInt32Param(sim.intparam_idle_fps, defaultIdleFps)
-
-out.release()
