@@ -7,9 +7,9 @@ import os
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 
+# region coppeliasim init
 use_coppelia_sim = True
 camera_location = None
-
 
 if use_coppelia_sim:
     client = RemoteAPIClient()
@@ -31,12 +31,13 @@ if use_coppelia_sim:
     sim.startSimulation()
 
     sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
-
+# endregion
 
 #%%====================================
 #PARAMETERS TO BE CHANGED BY USER
 
 #index of first frame to be processed
+
 start_frame = 1300
 #index of last frame to be processed, if None: all frames from input folder/input video folder will be processed
 #you can also terminate the processing immediately by press 'q' key
@@ -44,10 +45,13 @@ stop_frame = 1339
 #change the value if you want to skip some frames on the sequence
 step_frame = 1
 
+
+# <editor-fold desc="parameters">
 #True if you want to show image with results, False otherwise
 showImage = True
 #value for cv2.waitKey() function - 0: wait for key to be pressed, otherwise: time in miliseconds to show image
 cv2waitKeyVal = 1
+# </editor-fold>
 
 #True if you want to save the results to a file, False otherwise
 saveResults = False
