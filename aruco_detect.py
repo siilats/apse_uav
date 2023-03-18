@@ -7,51 +7,44 @@ import os
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 
-# region coppeliasim init
-use_coppelia_sim = True
+img_counter = 0
+
+use_boards = True
+use_coppelia_sim = False
 camera_location = None
+baseBoard_orientation = None
+floor_level = 0.01 #floor level in meters
 
-if use_coppelia_sim:
-    client = RemoteAPIClient()
-    sim = client.getObject('sim')
+#True if you use images as input, False if you use video
+useImages = False
+#path to folder with input images
+#images inside must be named image_XXXX.png, where XXXX is the frame number
+if useImages:
+    path_input_images = "dynamic_images"
 
-    visionSensorHandle = sim.getObject('/Vision_sensor')
+#True if you use video as input, False if you you images
+useVideo = not useImages
+#path to an input video (path + filename + extension)
+if useVideo:
+    path_input_video = "moving_cam.mp4" #"coppeliasim_video.mp4"
 
-    markers = []
-    for i in range(4):
-        markers.append(sim.getObject('/marker_' + str(i)))
-
-    baseBoard = markers[0]
-    yokeBoard = markers[3]
-
-    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
-    sim.setInt32Param(sim.intparam_idle_fps, 0)
-    # Run a simulation in stepping mode:
-    client.setStepping(True)
-    sim.startSimulation()
-
-    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
-# endregion
 
 #%%====================================
 #PARAMETERS TO BE CHANGED BY USER
 
 #index of first frame to be processed
-
-start_frame = 1300
+start_frame = 1300 if not useVideo else 1
 #index of last frame to be processed, if None: all frames from input folder/input video folder will be processed
 #you can also terminate the processing immediately by press 'q' key
-stop_frame = 1339
+#stop_frame = 1339
+stop_frame = start_frame + 39
 #change the value if you want to skip some frames on the sequence
 step_frame = 1
 
-
-# <editor-fold desc="parameters">
 #True if you want to show image with results, False otherwise
 showImage = True
 #value for cv2.waitKey() function - 0: wait for key to be pressed, otherwise: time in miliseconds to show image
 cv2waitKeyVal = 1
-# </editor-fold>
 
 #True if you want to save the results to a file, False otherwise
 saveResults = False
@@ -90,19 +83,6 @@ drawPoints = False
 #path to camera parameters file
 path_camera_params = "data/" + "cam_params.json"
 
-#True if you use images as input, False if you use video
-useImages = True
-#path to folder with input images
-#images inside must be named image_XXXX.png, where XXXX is the frame number
-if useImages:
-    path_input_images = "dynamic_images"
-
-#True if you use video as input, False if you you images
-useVideo = False
-#path to an input video (path + filename + extension)
-if useVideo:
-    path_input_video = "/Users/keithsiilats/Downloads/controltest.mp4"
-
 #path to data from DCNN detection, used only if useCentroidData is True (path + filename.csv)
 if useCentroidData:
     path_dcnn_data = "your_path"
@@ -116,6 +96,73 @@ if saveResults:
 #path must lead to an existing folder!
 if saveImages:
     path_output_images = "your_path"
+
+
+
+#height, width = 2160, 3840 #fixed input image/video resolution
+height, width = None, None #fixed input image/video resolution
+if not use_boards:
+    markerLengthOrg = 0.55 #real size of the marker in metres, this value does not change in algorithm
+else:
+    markerLengthOrg = 0.05
+    square_len = 0.064
+    marker_seperation = 0.017
+markerLength = markerLengthOrg #real size of the marker in metres, this value changes in algorithm
+marker_div = 1.2 #correction for altitude estimation from marker
+div = 1.013 #additional correction for distance calculation (based on altitude test)
+DIFF_MAX = 2/3 * step_frame * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
+
+obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
+obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
+            [markerLength / 2, markerLength / 2, 0],
+            [markerLength / 2, -markerLength / 2, 0],
+            [-markerLength / 2, -markerLength / 2, 0]])
+
+
+if use_coppelia_sim:
+    client = RemoteAPIClient()
+    sim = client.getObject('sim')
+    sim.stopSimulation()
+
+    visionSensorHandle = sim.getObject('/Vision_sensor')
+
+    baseBoard = sim.getObject('/baseBoard')
+    yokeBoard = sim.getObject('/yokeBoard')
+
+    sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
+    sim.setObjectOrientation(baseBoard, -1, [180/360*2*3.1415, 0, -90/360*2*3.1415])
+    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, 60/360*2*3.1415])
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    #underneath_orientation = [0, 0, 180/360*2*-3.14159]
+    above_orientation = [-180/360*2*3.1415, 0, 180/360*2*3.1415]
+    #sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
+    #alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
+    sim.setObjectOrientation(visionSensorHandle, -1, above_orientation)
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 50])
+
+    #get shapebb
+    shapebb = sim.getShapeBB(baseBoard)
+    shapebb_yoke = sim.getShapeBB(yokeBoard)
+    coppeliasize = shapebb[0]
+    targetsize = markerLengthOrg/100
+    #set object scale
+    #sim.scaleObject(baseBoard, targetsize/coppeliasize, targetsize/coppeliasize, targetsize/coppeliasize)
+    #sim.scaleObject(yokeBoard, targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0])
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
+
+    #sim.handleVisionSensor(visionSensorHandle)
+
+    # Run a simulation in stepping mode:
+    client.setStepping(True)
+
+    sim.startSimulation()
+
+    client.step()
+
+    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
 
 
 
@@ -224,6 +271,7 @@ def setArucoParameters():
     parameters = aruco.DetectorParameters()
     
     #set values for Aruco detection parameters
+
     parameters.minMarkerPerimeterRate = 0.01 #enables detection from higher altitude
     parameters.perspectiveRemovePixelPerCell = 8
     parameters.perspectiveRemoveIgnoredMarginPerCell = 0.33
@@ -232,13 +280,18 @@ def setArucoParameters():
     parameters.aprilTagMaxNmaxima = 5
     parameters.aprilTagCriticalRad = 20*np.pi/180 #much less candidates to encode ID
     parameters.aprilTagMaxLineFitMse = 1
-    parameters.aprilTagMinWhiteBlackDiff = 100 #faster detection, but in bad contrast problems may happen
+
+    parameters.aprilTagMinWhiteBlackDiff = 10 #faster detection, but in bad contrast problems may happen
     #parameters.aprilTagQuadDecimate = 1.5 #huge detection time speedup, but at the cost of fewer detections and worse accuracy
     
     #default set of all Aruco detection parameters
-    #parameters.adaptiveThreshWinSizeMin = 3
-    #parameters.adaptiveThreshWinSizeMax = 23
-    #parameters.adaptiveThreshWinSizeStep = 10
+
+    parameters.adaptiveThreshWinSizeMin = 50
+    parameters.adaptiveThreshWinSizeMax = 400
+    parameters.adaptiveThreshWinSizeStep = 40
+
+    #parameters.useAruco3Detection = True
+
     #parameters.adaptiveThreshConstant = 7
     #parameters.minMarkerPerimeterRate = 0.03
     #parameters.maxMarkerPerimeterRate = 4
@@ -291,9 +344,9 @@ def preprocessFrame(frame):
     
     return frame
 
+aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 def detectArucoMarkers(gray, parameters):
     #use predefined Aruco markers dictionary
-    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 
     #detect markers with APRILTAG method
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
@@ -357,37 +410,7 @@ def printDataOnImage(corners, tvec, rvec, ids):
     #calculate real altitude to be printed
     tvec_temp = tvec.copy()
     tvec_temp[2] = tvec_temp[2]/marker_div
-    if use_coppelia_sim:
-        if ids == 1:#matches the base_board marker
-            #move camera to -tvec_temp
-            camera_location = tvec_temp
-            height_to_subtract = camera_location[2]
-            #print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
-            #print("Camera location: ", camera_location)
-            sim.setObjectPosition(visionSensorHandle, -1, camera_location.tolist())
 
-            #mtx is 3x3 rotation matrix, apply it on vision_sensor_matrix
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(baseBoard, -1, (tvec_temp).tolist())
-
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            #set object orientation to vector rvec
-            sim.setObjectOrientation(baseBoard, -1, r.as_euler('zxy', degrees=True).tolist())
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            sim.setObjectOrientation(baseBoard, -1, rvec.tolist())
-            rvec_t = sim.getObjectOrientation(baseBoard, -1)
-            print("rvec: ", rvec)
-        elif ids == 4 and camera_location is not None:
-            #move the yoke marker
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(yokeBoard, -1, ( ( tvec_temp)).tolist())
-            print("moved yokeBoard")
-        else:
-            tvec_temp[2] = tvec_temp[2] - height_to_subtract
-            sim.setObjectPosition(markers[ids-1], -1, ((tvec_temp)).tolist())
-        print(f"moved marker id {ids - 1} to {tvec_temp}")
-        sim.addLog(sim.verbosity_scriptinfos, f"id={ids}, tvec={tvec_temp}, camera_location={camera_location}")
-        client.step()  # triggers next simulation step
     #calculate angles and position and convert them to text
     ang = 'R = ' + str([round(r.as_euler('zxy', degrees=True)[0],2),
                         round(r.as_euler('zxy', degrees=True)[1],2),
@@ -586,21 +609,14 @@ def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, ang1=0, a
         cv2.putText(frame, dist_aruco, position_red, font, 3.0, (0, 0, 255), 6, cv2.LINE_AA)
         cv2.putText(frame, angle, position_yellow, font, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
 
+
+def convert_angles(rvec):
+    r = R.from_rotvec(rvec)
+    ang = r.as_euler('zxy', degrees=True)
+    return ang
 #%%====================================
 #ALGORITHM PARAMETERS (DO NOT CHANGE!) AND DATA READ
 
-height, width = 2160, 3840 #fixed input image/video resolution
-markerLengthOrg = 0.55 #real size of the marker in metres, this value does not change in algorithm
-markerLength = markerLengthOrg #real size of the marker in metres, this value changes in algorithm
-marker_div = 1.2 #correction for altitude estimation from marker
-div = 1.013 #additional correction for distance calculation (based on altitude test)
-DIFF_MAX = 2/3 * step_frame * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
-
-obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
-obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
-            [markerLength / 2, markerLength / 2, 0],
-            [markerLength / 2, -markerLength / 2, 0],
-            [-markerLength / 2, -markerLength / 2, 0]])
 
 if useCentroidData:
     centroid_data = readCentroidData(path_dcnn_data) #read centroid data from DCNN
@@ -608,12 +624,12 @@ if saveResults:
     file = outputDataInit() #initialize output file for saving results
     
 parameters = setArucoParameters() #create Aruco detection parameters
-mtx, dist = readCameraParams() #read camera parameters
+#mtx, dist = readCameraParams() #read camera parameters
 msp1_avg, msp2_avg, msp3_avg, msp4_avg = setAverageMarkerSize() #initialization of marker size averaging variables
 detected_ID_prev = [0,0,0,0] #initialization of vehicle detection state on previous frame
 [cx1_prev, cy1_prev, cx2_prev, cy2_prev, cx3_prev, cy3_prev, cx4_prev, cy4_prev] = np.zeros(8, dtype='int') #initialization of ArUco marker centres
 
-gamma = 2 #gamma parameter value
+gamma = 1 #gamma parameter value
 lookUpTable = np.empty((1,256), np.uint8) #look-up table for gamma correction
 for i in range(256):
     lookUpTable[0,i] = np.clip(pow(i/255.0, gamma) * 255.0, 0, 255)
@@ -627,24 +643,63 @@ veh1_coords = np.float32([[0,0.42,0]])
 veh2_coords = np.float32([[0,0.59,0]])
 veh3_coords = np.float32([[0,0.58,0]])
 
+frame = None
 #initialize values if images are used
 if useImages:
     k = start_frame
     stop_frame = len(os.listdir(path_input_images)) if stop_frame is None else stop_frame
+    frame = cv2.imread(path_input_images + "/image_%04d.png" % start_frame)
 
 #initialize values if video is used
 elif useVideo:
     video = cv2.VideoCapture(path_input_video)
     k = start_frame
-    if start_frame > 1 and video.isOpened():
-        for i in range(start_frame-1):
+    if start_frame > 0 and video.isOpened():
+        for i in range(start_frame):
             ret, frame = video.read()
             if ret == False:
                 break
     stop_frame = np.inf if stop_frame is None else stop_frame
 
+height, width, channels = frame.shape
+
+fov = 60.0
+focal_length = width / (2 * np.tan(fov * np.pi / 360))
+mtx = np.array([[focal_length, 0, width/2],
+                          [0, focal_length, height/2],
+                          [0, 0, 1]])
+dist = None
+
 #calculate maps for undistortion
 mapx, mapy = cv2.initUndistortRectifyMap(mtx, dist, None, mtx, (width, height), 5)
+
+
+def pick_rvec(rvecs, tvecs):
+    generic_ang1 = convert_angles(rvecs[0].ravel())
+    generic_ang2 = convert_angles(rvecs[1].ravel())
+    if abs(generic_ang1[2] - 180) < abs(generic_ang2[2] - 180):
+        rvectmp = rvecs[0].ravel()
+        tvectmp = tvecs[0].ravel()
+    else:
+        rvectmp = rvecs[1].ravel()
+        tvectmp = tvecs[1].ravel()
+
+    return rvectmp, tvectmp
+
+
+def matchImagePointsforcharuco(charuco_corners, charuco_ids):
+    base_obj_pts = []
+    base_img_pts = []
+    for i in range(0, len(charuco_ids)):
+        index = charuco_ids[i]
+        base_obj_pts.append(base_board.getChessboardCorners()[index])
+        base_img_pts.append(charuco_corners[i])
+
+    base_obj_pts = np.array(base_obj_pts)
+    base_img_pts = np.array(base_img_pts)
+
+    return base_obj_pts, base_img_pts
+
 
 #iterate over frames
 while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
@@ -656,167 +711,278 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
         if ret == False:
             break
 
+    height, width, channels = frame.shape
     detected_ID = [0,0,0,0] #by default no vehicle is detected in image
 
     #real vehicle dimensions in metres wrt. Aruco marker: back, front, left, right
     veh4_dim = [-2.35, 2.49, -0.86, 0.86]
     veh1_dim = [-1.95, 2.8, -0.9, 0.9]
     veh2_dim = [-1.68, 2.86, -0.87, 0.87]
-    veh3_dim = [-1.32, 2.48, -0.86, 0.86]    
+    veh3_dim = [-1.32, 2.48, -0.86, 0.86]
 
     #frame preprocessing - camera distortion removal and gamma correction
     frame = preprocessFrame(frame)
 
-    #convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    corners, ids = detectArucoMarkers(gray, parameters)
+    # gray = cv2.medianBlur(gray, 3)
+    # gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 201, 5)
+    # gray = gray.astype(np.uint8)
+
+    if use_boards:
+        base_board_size = (3, 3)
+        marker_len = markerLengthOrg
+        square_len = 0.064
+        marker_seperation = 0.017
+        base_board = aruco.CharucoBoard(base_board_size, squareLength=square_len,
+                                        markerLength=marker_len, dictionary=aruco_dict,
+                                        ids=np.arange(4))
+        base_detector = aruco.CharucoDetector(base_board)
+        base_detector.setDetectorParameters(parameters)
+        # define the planar aruco board and its detector
+        # the default ids is np.arange(24, 27)
+        base_corners, base_ids, corners, ids = \
+            base_detector.detectBoard(gray)
+    else:
+        corners, ids = detectArucoMarkers(gray, parameters)
     # write me adaptive grayscale in opencv
     idx = np.argsort(ids.ravel())
+    corner_not_tuple = np.array(corners)[idx]
     corners = tuple(np.array(corners)[idx])
     ids = ids[idx]
 
-
 #%%====================================
 #MARKER DETECTION AND POINTS CALCULATIONS
-    tvec = np.zeros((5,3))
-    rvec = np.zeros((5,3))
+    tvec = np.zeros((100,3))
+    rvec = np.zeros((100,3))
     #if any marker was detected
     if np.all(ids != None):
         #estimate pose of detected markers
+        if use_boards:
+            yoke_board_size = (3, 1)
 
-        # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
-        
-        #iterate over all detected markers
-        for i in range(len(ids)):
-            #only markers with ID={1,2,3,4} are used at this moment
-            # rvectmp=rvec[i][0] #compartible w previous version
-            # tvectmp=tvec[i][0] #compartible w previous version
-            flag, rvecs, tvecs, r2 = cv2.solvePnPGeneric(
-                obj_points2, corners[i], mtx, dist,
-                flags=cv2.SOLVEPNP_IPPE_SQUARE)
-            rvectmp = rvecs[0].ravel()
-            tvectmp = tvecs[0].ravel()
-            tvec[i] = tvectmp
-            rvec[i] = rvectmp
+            yoke_board = aruco.GridBoard(yoke_board_size, markerLength=marker_len,
+                                              markerSeparation=marker_seperation, dictionary=aruco_dict,
+                                              ids=np.arange(24, 27))
 
-            if(ids[i][0] == 4): #vehicle 4 (host)
-                cx4, cy4, msp, diff4, ang4 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx4_prev, None if k == start_frame else cy4_prev) #get detected marker parameters
-                
-                if detected_ID_prev[3] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
-                    detected_ID[3] = 1 #mark vehicle as detected 
-                    cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
-                
-                if (detected_ID_prev[3] == 1 and diff4 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
-                    if drawMarkers:
-                        cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
-                    if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
-                    if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
-                    
-                    detected_ID[3] = 1 #mark vehicle as detected
+            yoke_detector = aruco.ArucoDetector(dictionary=aruco_dict,
+                                                     refineParams=aruco.RefineParameters())
+            # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
+            ids_for_planar_board = ids.ravel() > 10
+            yoke_board_corners, yoke_board_ids, yoke_rejectedCorners, yoke_recoveredIdxs = \
+            yoke_detector.refineDetectedMarkers(gray, yoke_board,
+                                                          np.asarray(corners)[ids_for_planar_board],
+                                                          ids[ids_for_planar_board].ravel(),
+                                                        cameraMatrix=mtx,
+                                                        rejectedCorners=None,
+                                                        distCoeffs=dist)
+
+            yoke_obj_points, yoke_img_points = yoke_board.matchImagePoints(yoke_board_corners, yoke_board_ids)
+            yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
+                yoke_obj_points,yoke_img_points, mtx, dist,
+                flags=cv2.SOLVEPNP_IPPE)
+            rvectmp, tvectmp = pick_rvec(yoke_rvecs, yoke_tvecs)
+            tvec[1] = tvectmp
+            rvec[1] = rvectmp
+
+            base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids)
+
+            # bug in cv.solvePnPGeneric
+            base_flag, base_rvecs, base_tvecs, base_reproj_error = cv2.solvePnPGeneric(base_obj_points,
+                                                             base_img_points,
+                                                             mtx,
+                                                             dist,
+                                                             flags=cv2.SOLVEPNP_IPPE)
+
+            rvectmp, tvectmp = pick_rvec(base_rvecs, base_tvecs)
+            tvec[4] = tvectmp
+            rvec[4] = rvectmp
+
+        else:
+            #iterate over all detected markers
+            for i in range(len(ids)):
+                #only markers with ID={1,2,3,4} are used at this moment
+                # rvectmp=rvec[i][0] #compartible w previous version
+                # tvectmp=tvec[i][0] #compartible w previous version
+                flag, rvecs, tvecs, r2 = cv2.solvePnPGeneric(
+                    obj_points2, corners[i], mtx, dist,
+                    flags=cv2.SOLVEPNP_IPPE_SQUARE)
+
+                rvectmp, tvectmp = pick_rvec(rvecs, tvecs)
+
+                tvec[i] = tvectmp
+                rvec[i] = rvectmp
+
+                if(ids[i][0] == 4): #vehicle 4 (host)
+                    cx4, cy4, msp, diff4, ang4 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx4_prev, None if k == start_frame else cy4_prev) #get detected marker parameters
+
+                    if use_coppelia_sim and camera_location is not None:
+                        # move the yoke marker
+                        tvectmp_cp = tvectmp.copy() - camera_location
+                        tvectmp_cp[2] = floor_level
+
+                        #tvectmp_cp[1] = -tvectmp_cp[1]
+                        sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[1], tvectmp_cp[2]])
+                        print("moved yokeBoard", tvectmp_cp.tolist())
+
+                        r4 = R.from_rotvec(rvectmp)
+                        #rvectmp[1] = -rvectmp[1]
+                        ang4 = r4.as_euler('zxy', degrees=True)[0]
+                        correction = -90 - baseBoard_orientation #-7
+                        final_angle = 180 - ang4 + correction
+
+                        #we have -90 and then angle4 is 120 and we want answe 45
+                        sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, final_angle/360*2*3.1415])
+                        #sim.setObjectOrientation(yokeBoard, -1, ((r1.as_euler('zxy', degrees=True) - r4.as_euler('zxy', degrees=True))/ 360 * 2 * 3.1415).tolist())
+                        #sim.handleVisionSensor(visionSensorHandle)
+                        client.step()
+
+                        img, resX, resY = sim.getVisionSensorCharImage(visionSensorHandle)
+                        img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+                        img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+                        #img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+                        #create image name with img_counter padded with zeros
+
+                        img_name = "image_{}.png".format(start_frame + img_counter)
+                        img_counter += 1
+                        #save image
+                        corners_t, ids_t = detectArucoMarkers(img, parameters)
+                        cv2.imwrite("test_video/" + img_name, img)
+
+
+
+                    if detected_ID_prev[3] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
+                        detected_ID[3] = 1 #mark vehicle as detected
+                        cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
+
+                    if (detected_ID_prev[3] == 1 and diff4 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
+                        if drawMarkers:
+                            cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
+                        if drawMarkersAxes:
+                            aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
+                        if showDataOnImage:
+                            printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
+
+                        detected_ID[3] = 1 #mark vehicle as detected
+                        altitude = tvectmp[2] #altitude info
+                        markerLength = markerLengthCorrection(altitude) #correction of original marker size based on altitude
+                        altitude = altitude/marker_div #calculate real altitude
+
+                        size_corr4, msp4 = calculateAverageMarkerSize(msp4_avg, msp) #marker size averaging
+                        leds = detectAndDrawLEDs(gray, tvectmp, rvectmp, size_corr4, msp4, LEDs_threshold) #LEDs detection
+
+                        imgpts_veh4 = centroidFromAruco(veh4_coords, tvectmp, rvectmp, size_corr4) #calculate centroid of the vehicle wrt. Aruco marker
+                        imgpts_veh4_lidar = centroidFromAruco(veh4_coords_lidar, tvectmp, rvectmp, size_corr4) #calculate Lidar's position wrt. Aruco marker
+                        cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
+
+                        if useCentroidData:
+                            imgpts_veh4_dcnn = centroidFromDCNN(centroid_data[k-1][1], centroid_data[k-1][2]) #calculate Aruco position wrt. vehicle centroid from DCNN
+                        veh4_dim = drawBoundingBox(tvectmp, rvectmp, veh4_dim, size_corr4) #draw bounding box of the vehicle
+                    else: #detected marker is a FP, change its ID to incorrect value
+                        ids[i][0] = -1
+
+                if([4] not in ids): #if host is not detected, use altitude data from another marker
                     altitude = tvectmp[2] #altitude info
                     markerLength = markerLengthCorrection(altitude) #correction of original marker size based on altitude
                     altitude = altitude/marker_div #calculate real altitude
-                    
-                    size_corr4, msp4 = calculateAverageMarkerSize(msp4_avg, msp) #marker size averaging
-                    leds = detectAndDrawLEDs(gray, tvectmp, rvectmp, size_corr4, msp4, LEDs_threshold) #LEDs detection
-                    
-                    imgpts_veh4 = centroidFromAruco(veh4_coords, tvectmp, rvectmp, size_corr4) #calculate centroid of the vehicle wrt. Aruco marker
-                    imgpts_veh4_lidar = centroidFromAruco(veh4_coords_lidar, tvectmp, rvectmp, size_corr4) #calculate Lidar's position wrt. Aruco marker
-                    cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
-                    
-                    if useCentroidData:
-                        imgpts_veh4_dcnn = centroidFromDCNN(centroid_data[k-1][1], centroid_data[k-1][2]) #calculate Aruco position wrt. vehicle centroid from DCNN
-                    veh4_dim = drawBoundingBox(tvectmp, rvectmp, veh4_dim, size_corr4) #draw bounding box of the vehicle
-                else: #detected marker is a FP, change its ID to incorrect value
-                    ids[i][0] = -1
-            
-            if([4] not in ids): #if host is not detected, use altitude data from another marker
-                altitude = tvectmp[2] #altitude info
-                markerLength = markerLengthCorrection(altitude) #correction of original marker size based on altitude
-                altitude = altitude/marker_div #calculate real altitude
-            
-            if(ids[i][0] == 1): #vehicle 1
-                cx1, cy1, msp, diff1, ang1 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx1_prev, None if k == start_frame else cy1_prev) #get detected marker parameters
-                
-                if detected_ID_prev[0] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
-                    detected_ID[0] = 1 #mark vehicle as detected
-                    cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
-                    
-                if (detected_ID_prev[0] == 1 and diff1 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
-                    if drawMarkers:
-                        cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
-                    if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
-                    if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
-                    
-                    detected_ID[0] = 1 #mark vehicle as detected
-                    size_corr1, msp1 = calculateAverageMarkerSize(msp1_avg, msp) #marker size averaging
-                    imgpts_veh1 = centroidFromAruco(veh1_coords, tvectmp, rvectmp, size_corr1) #calculate centroid of the vehicle wrt. Aruco marker
-                    cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
-                    
-                    if useCentroidData:
-                        imgpts_veh1_dcnn = centroidFromDCNN(centroid_data[k-1][5], centroid_data[k-1][6]) #calculate Aruco position wrt. vehicle centroid from DCNN
-                        imgpts_veh1_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][7], centroid_data[k-1][8]) #calculate closest point of the vehicle from DCNN
-                    veh1_dim = drawBoundingBox(tvectmp, rvectmp, veh1_dim, size_corr1) #draw bounding box of the vehicle
-                else: #detected marker is a FP, change its ID to incorrect value
-                    ids[i][0] = -1
-                
-            if(ids[i][0] == 2): #vehicle 2
-                cx2, cy2, msp, diff2, ang2 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx2_prev, None if k == start_frame else cy2_prev) #get detected marker parameters
-                
-                if detected_ID_prev[1] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
-                    detected_ID[1] = 1 #mark vehicle as detected
-                    cx2_prev, cy2_prev = cx2, cy2 #save position of the marker in the image
-                
-                if (detected_ID_prev[1] == 1 and diff2 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
-                    if drawMarkers:
-                        cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
-                    if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
-                    if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
-                    
-                    detected_ID[1] = 1 #mark vehicle as detected
-                    size_corr2, msp2 = calculateAverageMarkerSize(msp2_avg, msp) #marker size averaging
-                    imgpts_veh2 = centroidFromAruco(veh2_coords, tvectmp, rvectmp, size_corr2) #calculate centroid of the vehicle wrt. Aruco marker
-                    cx2_prev, cy2_prev = cx2, cy2 #save position of the marker in the image
-                    
-                    if useCentroidData:
-                        imgpts_veh2_dcnn = centroidFromDCNN(centroid_data[k-1][9], centroid_data[k-1][10]) #calculate Aruco position wrt. vehicle centroid from DCNN
-                        imgpts_veh2_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][11], centroid_data[k-1][12]) #calculate closest point of the vehicle from DCNN
-                    veh2_dim = drawBoundingBox(tvectmp, rvectmp, veh2_dim, size_corr2) #draw bounding box of the vehicle
-                else: #detected marker is a FP, change its ID to incorrect value
-                    ids[i][0] = -1
-            
-            if(ids[i][0] == 3): #vehicle 3
-                cx3, cy3, msp, diff3, ang3 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx3_prev, None if k == start_frame else cy3_prev) #get detected marker parameters
-                
-                if detected_ID_prev[2] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
-                    detected_ID[2] = 1 #mark vehicle as detected 
-                    cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
-                
-                if (detected_ID_prev[2] == 1 and diff3 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
-                    if drawMarkers:
-                        cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
-                    if drawMarkersAxes:
-                        aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
-                    if showDataOnImage:
-                        printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
-                    
-                    detected_ID[2] = 1 #mark vehicle as detected
-                    size_corr3, msp3 = calculateAverageMarkerSize(msp3_avg, msp) #marker size averaging
-                    imgpts_veh3 = centroidFromAruco(veh3_coords, tvectmp, rvectmp, size_corr3) #calculate centroid of the vehicle wrt. Aruco marker
-                    cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
-                    
-                    if useCentroidData:
-                        imgpts_veh3_dcnn = centroidFromDCNN(centroid_data[k-1][13], centroid_data[k-1][14]) #calculate Aruco position wrt. vehicle centroid from DCNN
-                        imgpts_veh3_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][15], centroid_data[k-1][16]) #calculate closest point of the vehicle from DCNN
-                    veh3_dim = drawBoundingBox(tvectmp, rvectmp, veh3_dim, size_corr3) #draw bounding box of the vehicle
-                else: #detected marker is a FP, change its ID to incorrect value
-                    ids[i][0] = -1
+
+                if(ids[i][0] == 1): #vehicle 1
+                    cx1, cy1, msp, diff1, ang1 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx1_prev, None if k == start_frame else cy1_prev) #get detected marker parameters
+
+                    if use_coppelia_sim:
+                        camera_orientation = rvectmp.copy()
+                        camera_location = tvectmp
+
+                    if detected_ID_prev[0] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
+                        detected_ID[0] = 1 #mark vehicle as detected
+                        cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
+
+                        if use_coppelia_sim:
+                            r1 = R.from_rotvec(camera_orientation)
+                            baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                            camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
+                            # print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
+                            # print("Camera location: ", camera_location)
+                            sim.setObjectPosition(visionSensorHandle, -1, camera_location_coppelia)
+                            #sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
+
+
+                    if (detected_ID_prev[0] == 1 and diff1 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
+                        if drawMarkers:
+                            cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
+                        if drawMarkersAxes:
+                            aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
+                        if showDataOnImage:
+                            printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
+
+                        detected_ID[0] = 1 #mark vehicle as detected
+                        size_corr1, msp1 = calculateAverageMarkerSize(msp1_avg, msp) #marker size averaging
+                        imgpts_veh1 = centroidFromAruco(veh1_coords, tvectmp, rvectmp, size_corr1) #calculate centroid of the vehicle wrt. Aruco marker
+                        cx1_prev, cy1_prev = cx1, cy1 #save position of the marker in the image
+
+                        if useCentroidData:
+                            imgpts_veh1_dcnn = centroidFromDCNN(centroid_data[k-1][5], centroid_data[k-1][6]) #calculate Aruco position wrt. vehicle centroid from DCNN
+                            imgpts_veh1_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][7], centroid_data[k-1][8]) #calculate closest point of the vehicle from DCNN
+                        veh1_dim = drawBoundingBox(tvectmp, rvectmp, veh1_dim, size_corr1) #draw bounding box of the vehicle
+                    else: #detected marker is a FP, change its ID to incorrect value
+                        ids[i][0] = -1
+
+                if(ids[i][0] == 2): #vehicle 2
+                    cx2, cy2, msp, diff2, ang2 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx2_prev, None if k == start_frame else cy2_prev) #get detected marker parameters
+
+                    if detected_ID_prev[1] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
+                        detected_ID[1] = 1 #mark vehicle as detected
+                        cx2_prev, cy2_prev = cx2, cy2 #save position of the marker in the image
+
+                    if (detected_ID_prev[1] == 1 and diff2 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
+                        if drawMarkers:
+                            cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
+                        if drawMarkersAxes:
+                            aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
+                        if showDataOnImage:
+                            printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
+
+                        detected_ID[1] = 1 #mark vehicle as detected
+                        size_corr2, msp2 = calculateAverageMarkerSize(msp2_avg, msp) #marker size averaging
+                        imgpts_veh2 = centroidFromAruco(veh2_coords, tvectmp, rvectmp, size_corr2) #calculate centroid of the vehicle wrt. Aruco marker
+                        cx2_prev, cy2_prev = cx2, cy2 #save position of the marker in the image
+
+                        if useCentroidData:
+                            imgpts_veh2_dcnn = centroidFromDCNN(centroid_data[k-1][9], centroid_data[k-1][10]) #calculate Aruco position wrt. vehicle centroid from DCNN
+                            imgpts_veh2_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][11], centroid_data[k-1][12]) #calculate closest point of the vehicle from DCNN
+                        veh2_dim = drawBoundingBox(tvectmp, rvectmp, veh2_dim, size_corr2) #draw bounding box of the vehicle
+                    else: #detected marker is a FP, change its ID to incorrect value
+                        ids[i][0] = -1
+
+                if(ids[i][0] == 3): #vehicle 3
+                    cx3, cy3, msp, diff3, ang3 = getMarkerData(corners[i][0], rvectmp, None if k == start_frame else cx3_prev, None if k == start_frame else cy3_prev) #get detected marker parameters
+
+                    if detected_ID_prev[2] == 0: #if this marker was not detected on previous frame, it may be 'new' or FP
+                        detected_ID[2] = 1 #mark vehicle as detected
+                        cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
+
+                    if (detected_ID_prev[2] == 1 and diff3 < DIFF_MAX) or k == start_frame: #if this marker was detected on previous frame and its position in the image is similar
+                        if drawMarkers:
+                            cv2.drawContours(frame, [np.maximum(0,np.int32(corners[i][0]))], -1, (0,255,0), 3)
+                        if drawMarkersAxes:
+                            aruco.drawAxis(frame, mtx, dist, rvectmp, tvectmp, markerLength)
+                        if showDataOnImage:
+                            printDataOnImage(corners[i][0][0], tvectmp, rvectmp, ids[i][0])
+
+                        detected_ID[2] = 1 #mark vehicle as detected
+                        size_corr3, msp3 = calculateAverageMarkerSize(msp3_avg, msp) #marker size averaging
+                        imgpts_veh3 = centroidFromAruco(veh3_coords, tvectmp, rvectmp, size_corr3) #calculate centroid of the vehicle wrt. Aruco marker
+                        cx3_prev, cy3_prev = cx3, cy3 #save position of the marker in the image
+
+                        if useCentroidData:
+                            imgpts_veh3_dcnn = centroidFromDCNN(centroid_data[k-1][13], centroid_data[k-1][14]) #calculate Aruco position wrt. vehicle centroid from DCNN
+                            imgpts_veh3_dcnn_bbox = boundingBoxFromDCNN(centroid_data[k-1][15], centroid_data[k-1][16]) #calculate closest point of the vehicle from DCNN
+                        veh3_dim = drawBoundingBox(tvectmp, rvectmp, veh3_dim, size_corr3) #draw bounding box of the vehicle
+                    else: #detected marker is a FP, change its ID to incorrect value
+                        ids[i][0] = -1
+
+                if use_coppelia_sim:
+                    client.step()
 
 #%%====================================
 #DISTANCE CALCULATION FOR VEHICLES
@@ -883,6 +1049,8 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     #show results on image
     if showImage:
         cv2.namedWindow("Detection result", cv2.WINDOW_NORMAL)
+        #resize image to fit screen
+        cv2.resizeWindow("Detection result", 1280, 720)
         cv2.imshow("Detection result", frame)
         if cv2.waitKey(cv2waitKeyVal) & 0xFF == ord('q'):
             break
@@ -902,6 +1070,8 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     if useVideo:
         for i in range(step_frame-1):
             ret, frame = video.read()
+            height, width, channels = frame.shape
+
             if ret == False:
                 break
 
