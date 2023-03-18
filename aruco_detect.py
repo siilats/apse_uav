@@ -770,6 +770,10 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
             ids[2][0] = 0
             ids[1][0] = 0
             ids[0][0] = 1
+            moving_car=4 #check this
+            base_car=1
+            moving_car_detected=1
+            base_car_detected=1
 
             cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_corners.squeeze(), rvec[0], None if k == start_frame else cx1_prev,
                                                        None if k == start_frame else cy1_prev)  # get detected marker parameters
