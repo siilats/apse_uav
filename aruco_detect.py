@@ -25,7 +25,7 @@ baseBoard_orientation = None
 floor_level = 0.01 #floor level in meters
 
 #True if you use images as input, False if you use video
-useImages = True
+useImages = False
 #path to folder with input images
 #images inside must be named image_XXXX.png, where XXXX is the frame number
 if useImages:
@@ -670,6 +670,9 @@ def matchImagePointsforcharuco(charuco_corners, charuco_ids):
 moving_car_detected = 0
 base_car_detected = 0
 #iterate over frames
+cx1,cy1,cx4,cy4 = 0,0,0,0
+msp4,msp1,msp=0,0,0
+ang1,ang4=0,0
 while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
     #read frame from image or video
     if useImages:
