@@ -7,16 +7,20 @@ import os
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 
+#three versions, 1, original images with use_images
+#one with boards and the video with lamp
+#third is video of the plane
+#also has the flag for mirror to coppeliasim
 img_counter = 0
 
-use_boards = True
-use_coppelia_sim = False
+use_boards = False
+use_coppelia_sim = True
 camera_location = None
 baseBoard_orientation = None
 floor_level = 0.01 #floor level in meters
 
 #True if you use images as input, False if you use video
-useImages = False
+useImages = True
 #path to folder with input images
 #images inside must be named image_XXXX.png, where XXXX is the frame number
 if useImages:
@@ -616,7 +620,6 @@ def convert_angles(rvec):
     return ang
 #%%====================================
 #ALGORITHM PARAMETERS (DO NOT CHANGE!) AND DATA READ
-
 
 if useCentroidData:
     centroid_data = readCentroidData(path_dcnn_data) #read centroid data from DCNN
