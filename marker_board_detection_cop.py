@@ -5,6 +5,7 @@ import json
 import csv
 import os
 from scipy.spatial.transform import Rotation as R
+from zmqRemoteApi import RemoteAPIClient
 
 # %%====================================
 # PARAMETERS TO BE CHANGED BY USER
@@ -53,6 +54,8 @@ drawLines = True
 # colour info: Aruco centroid and Lidar - cyan, DCNN centroid - magenta, DCNN closest point - white
 drawPoints = False
 
+use_coppelia_sim = True
+
 # path to camera parameters file
 path_camera_params = "data/" + "cam_params.json"
 
@@ -82,6 +85,50 @@ if saveImages:
 
 # %%====================================
 # FUNCTIONS FOR DATA INPUT/OUTPUT
+if use_coppelia_sim:
+    client = RemoteAPIClient()
+    sim = client.getObject('sim')
+    sim.stopSimulation()
+
+    visionSensorHandle = sim.getObject('/Vision_sensor')
+
+    baseBoard = sim.getObject('/baseBoard')
+    yokeBoard = sim.getObject('/yokeBoard')
+
+    sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
+    sim.setObjectOrientation(baseBoard, -1, [180/360*2*3.1415, 0, -90/360*2*3.1415])
+    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180/360*2*3.1415, 0, 60/360*2*3.1415])
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    #underneath_orientation = [0, 0, 180/360*2*-3.14159]
+    above_orientation = [-180/360*2*3.1415, 0, 180/360*2*3.1415]
+    #sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
+    #alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
+    sim.setObjectOrientation(visionSensorHandle, -1, above_orientation)
+    orientation = sim.getObjectOrientation(visionSensorHandle, -1)
+    sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 50])
+
+    #get shapebb
+    shapebb = sim.getShapeBB(baseBoard)
+    shapebb_yoke = sim.getShapeBB(yokeBoard)
+    coppeliasize = shapebb[0]
+    targetsize = markerLengthOrg/100
+    #set object scale
+    #sim.scaleObject(baseBoard, targetsize/coppeliasize, targetsize/coppeliasize, targetsize/coppeliasize)
+    #sim.scaleObject(yokeBoard, targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0])
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
+
+    #sim.handleVisionSensor(visionSensorHandle)
+
+    # Run a simulation in stepping mode:
+    client.setStepping(True)
+
+    sim.startSimulation()
+
+    client.step()
+
+    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
 
 def readCameraParams():
     # read camera parameters from file
@@ -641,8 +688,7 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
                     detected_ID[3] = 1  # mark vehicle as detected
                     cx4_prev, cy4_prev = cx4, cy4  # save position of the marker in the image
 
-                if (detected_ID_prev[
-                        3] == 1 and diff4 < DIFF_MAX) or k == start_frame:  # if this marker was detected on previous frame and its position in the image is similar
+                if (detected_ID_prev[3] == 1 and diff4 < DIFF_MAX) or k == start_frame:  # if this marker was detected on previous frame and its position in the image is similar
                     if drawMarkers:
                         cv2.drawContours(frame, [np.maximum(0, np.int32(corners[i][0]))], -1, (0, 255, 0), 3)
                     if drawMarkersAxes:
