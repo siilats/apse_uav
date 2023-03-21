@@ -11,8 +11,8 @@ print('Program started')
 client = RemoteAPIClient()
 sim = client.getObject('sim')
 
-tipHandle = sim.getObject('/LBR4p/tip')
-targetHandle = sim.getObject('/LBR4p/target')
+tipHandle = sim.getObject('/robot_arm/tip')
+targetHandle = sim.getObject('/robot_arm/target')
 
 # Set-up some movement variables:
 maxVel = 0.1
