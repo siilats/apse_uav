@@ -21,7 +21,7 @@ class ArucoDetect:
         self.base_car = 1
         self.moving_car = 5
         self.use_boards = False
-        self.use_coppelia_sim = False
+        self.use_coppelia_sim = True
         self.camera_location = None
         self.baseBoard_orientation = None
         self.floor_level = 0.01 #floor level in meters
@@ -153,18 +153,18 @@ class ArucoDetect:
             self.above_orientation = [-180/360*2*3.1415, 0, 180/360*2*3.1415]
             #sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
             #alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
-            self.sim.setObjectOrientation(visionSensorHandle, -1, above_orientation)
-            self.sim.setObjectPosition(visionSensorHandle, -1, [0, 0, 50])
+            self.sim.setObjectOrientation(self.visionSensorHandle, -1, self.above_orientation)
+            self.sim.setObjectPosition(self.visionSensorHandle, -1, [0, 0, 50])
 
             #get shapebb
-            self.shapebb = self.sim.getShapeBB(baseBoard)
-            self.shapebb_yoke = self.sim.getShapeBB(yokeBoard)
+            self.shapebb = self.sim.getShapeBB(self.baseBoard)
+            self.shapebb_yoke = self.sim.getShapeBB(self.yokeBoard)
             self.coppeliasize = self.shapebb[0]
             self.targetsize = self.markerLengthOrg/100
             #set object scale
             #sim.scaleObject(baseBoard, targetsize/coppeliasize, targetsize/coppeliasize, targetsize/coppeliasize)
             #sim.scaleObject(yokeBoard, targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0], targetsize / shapebb_yoke[0])
-            self.defaultIdleFps = self.sim.getInt32Param(sim.intparam_idle_fps)
+            self.defaultIdleFps = self.sim.getInt32Param(self.sim.intparam_idle_fps)
             self.sim.setInt32Param(self.sim.intparam_idle_fps, 0)
 
             #sim.handleVisionSensor(visionSensorHandle)
@@ -694,7 +694,7 @@ class ArucoDetect:
                 square_len = 0.064
                 marker_seperation = 0.017
                 base_board = aruco.CharucoBoard(base_board_size, squareLength=square_len,
-                                                markerLength=marker_len, dictionary=aruco_dict,
+                                                markerLength=marker_len, dictionary=self.aruco_dict,
                                                 ids=np.arange(4))
                 base_detector = aruco.CharucoDetector(base_board)
                 base_detector.setDetectorParameters(self.parameters)
@@ -879,7 +879,7 @@ class ArucoDetect:
                                     camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
                                     # print("position: ", sim.getObjectPosition(visionSensorHandle, -1))
                                     # print("Camera location: ", camera_location)
-                                    self.sim.setObjectPosition(visionSensorHandle, -1, camera_location_coppelia)
+                                    self.sim.setObjectPosition(self.visionSensorHandle, -1, camera_location_coppelia)
                                     #sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
 
 
