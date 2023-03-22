@@ -6,7 +6,7 @@ import json
 import csv
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
-
+from unitree import *
 
 #three versions, 1, original images with use_images
 #one with boards and the video with lamp
@@ -180,13 +180,6 @@ if use_coppelia_sim:
 
 #%%====================================
 #FUNCTIONS FOR DATA INPUT/OUTPUT
-
-def transformYokeDistToAngle(yoke_dist):
-    dist = abs(12.1 - yoke_dist)
-
-    angle = dist / 2 * -15
-
-    return angle / 360 * 2 * 3.1415
 
 def readCameraParams():
     #read camera parameters from file

@@ -204,8 +204,8 @@ class ArucoDetect:
         # initialize values if images are used
         if self.useImages:
             self.k = self.start_frame
-            self.stop_frame = len(os.listdir(path_input_images)) if stop_frame is None else stop_frame
-            self.frame = cv2.imread(path_input_images + "/image_%04d.png" % start_frame)
+            self.stop_frame = len(os.listdir(path_input_images)) if self.stop_frame is None else self.stop_frame
+            self.frame = cv2.imread(path_input_images + "/image_%04d.png" % self.start_frame)
 
         # initialize values if video is used
         elif self.useVideo:
@@ -498,7 +498,7 @@ class ArucoDetect:
 
         #set and draw the point on the image
         imgpts = np.maximum(0,np.int32(np.array([[xc, yc, 0]])))
-        if drawPoints:
+        if self.drawPoints:
             cv2.circle(self.frame, (int(imgpts[0][0]),int(imgpts[0][1])), 5, color=(255,0,255), thickness=-1)
 
         return imgpts
@@ -508,7 +508,7 @@ class ArucoDetect:
         xc = centroid_data_x
         yc = centroid_data_y
         imgpts = np.maximum(0,np.int32(np.array([[xc, yc, 0]])))
-        if drawPoints:
+        if self.drawPoints:
             cv2.circle(self.frame, (int(imgpts[0][0]),int(imgpts[0][1])), 5, color=(255,255,255), thickness=-1)
 
         return imgpts
@@ -846,7 +846,7 @@ class ArucoDetect:
 
                                 imgpts_veh4 = self.centroidFromAruco(self.veh4_coords, tvectmp, rvectmp, size_corr4) #calculate centroid of the vehicle wrt. Aruco marker
                                 imgpts_veh4_lidar = self.centroidFromAruco(self.veh4_coords_lidar, tvectmp, rvectmp, size_corr4) #calculate Lidar's position wrt. Aruco marker
-                                cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
+                                self.cx4_prev, self.cy4_prev = cx4, cy4 #save position of the marker in the image
 
                                 if self.useCentroidData:
                                     imgpts_veh4_dcnn = self.centroidFromDCNN(self.centroid_data[k-1][1], self.centroid_data[k-1][2]) #calculate Aruco position wrt. vehicle centroid from DCNN
@@ -916,7 +916,7 @@ class ArucoDetect:
                         for j in range(len(ids)):
                             if(ids[j][0] == self.base_car): #vehicle 1
                                 #start = time.time_ns()
-                                if (moving_car_detected == 1 and diff1 < self.DIFF_MAX) or k == self.start_frame: #if this marker was detected on previous frame and its position in the image is similar
+                                if (moving_car_detected == 1 and diff1 < self.DIFF_MAX) or self.k == self.start_frame: #if this marker was detected on previous frame and its position in the image is similar
                                     bbox = self.generatePointsBoundingBox(veh1_dim) #generate additional points for bounding box
                                     if self.sourceLidar:
                                         point = self.findMinimumDistanceBoundingBox(imgpts_veh4_lidar, bbox, tvec[j], rvec[j], size_corr1) #find the closest point of the bbox from Lidar
@@ -931,8 +931,8 @@ class ArucoDetect:
                                     if self.useCentroidData:
                                         dist_veh1_dcnn, dist_veh1_dcnn_bbox = self.calculateDistance(imgpts_veh4_lidar, imgpts_veh1_dcnn, imgpts_veh1_dcnn_bbox, markerLength, msp4, msp1) #calculate distances in metres for DCNN method
 
-                cx4_prev, cy4_prev = cx4, cy4  # save position of the marker in the image
-                cx1_prev, cy1_prev = cx1, cy1  # save position of the marker in the image
+                self.cx4_prev, self.cy4_prev = cx4, cy4  # save position of the marker in the image
+                self.cx1_prev, self.cy1_prev = cx1, cy1  # save position of the marker in the image
 
 
             #show results on image
