@@ -7,6 +7,8 @@ import csv
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
 import argparse
+import os
+import time
 
 class ArucoDetect:
     def __init__(self, ):
@@ -140,7 +142,9 @@ class ArucoDetect:
             self.client = RemoteAPIClient()
             self.sim = self.client.getObject('sim')
             self.sim.stopSimulation()
-
+            while self.sim.getSimulationState() != self.sim.simulation_stopped:
+                time.sleep(0.1)
+            self.sim.loadScene(os.getcwd() + "/two_cars.ttt")
             self.visionSensorHandle = self.sim.getObject('/Vision_sensor')
 
             self.baseBoard = self.sim.getObject('/baseBoard')
@@ -173,10 +177,10 @@ class ArucoDetect:
             self.client.setStepping(True)
             self.sim.startSimulation()
             self.client.step()
-            self.sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
+            self.sim.addLog(self.sim.verbosity_scriptinfos, "all set up ---------------------------")
 
         if self.useCentroidData:
-            self.centroid_data = readCentroidData(path_dcnn_data)  # read centroid data from DCNN
+            self.centroid_data = self.readCentroidData(self.path_dcnn_data)  # read centroid data from DCNN
         if self.saveResults:
             self.file = self.outputDataInit()  # initialize output file for saving results
 
@@ -204,8 +208,8 @@ class ArucoDetect:
         # initialize values if images are used
         if self.useImages:
             self.k = self.start_frame
-            self.stop_frame = len(os.listdir(path_input_images)) if self.stop_frame is None else self.stop_frame
-            self.frame = cv2.imread(path_input_images + "/image_%04d.png" % self.start_frame)
+            self.stop_frame = len(os.listdir(self.path_input_images)) if self.stop_frame is None else self.stop_frame
+            self.frame = cv2.imread(self.path_input_images + "/image_%04d.png" % self.start_frame)
 
         # initialize values if video is used
         elif self.useVideo:
@@ -648,7 +652,7 @@ class ArucoDetect:
         base_img_pts = []
         for i in range(0, len(charuco_ids)):
             index = charuco_ids[i]
-            base_obj_pts.append(base_board.getChessboardCorners()[index])
+            base_obj_pts.append(self.base_board.getChessboardCorners()[index])
             base_img_pts.append(charuco_corners[i])
 
         base_obj_pts = np.array(base_obj_pts)
