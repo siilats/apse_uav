@@ -5,14 +5,14 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="your-package-name",
+    name="unitree",
     version="0.0.1",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A short description of your package",
+    author="Keith Siilats",
+    author_email="keith@siilats.com",
+    description="Unitree Z1 robot",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/your-package-name",
+    url="https://github.com/siilats/unitree",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -25,4 +25,6 @@ setuptools.setup(
         "numpy>=1.19.5",
         "pandas>=1.3.0",
         "matplotlib>=3.4.2",
-        "scikit
+        "scikit",
+        "opencv-python>=4.7"]
+)
