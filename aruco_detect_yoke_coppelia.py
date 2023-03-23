@@ -6,7 +6,6 @@ import json
 import csv
 from scipy.spatial.transform import Rotation as R
 from zmqRemoteApi import RemoteAPIClient
-from unitree import *
 
 #three versions, 1, original images with use_images
 #one with boards and the video with lamp
@@ -558,27 +557,27 @@ def calculateDistance(lidar, aruco, bbox, markerLength, msp4, msp):
     
     return dist_aruco, dist_bbox
 
-def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, ang1=0, ang4=0):
-    #draw the line from source of the measurement to the closest point of the vehicle
-    cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(point[0]), int(point[1])), (0,255,255), 5)
-    
-    #draw the line from source of the measurement to the centre of vehicle' Aruco marker
-    cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(cx), int(cy)), (0,0,255), 5)
-    
-    if showDistancesOnImage:
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        
-        #calculate angles and position and convert them to text
-        dist_aruco = str(round(dist_aruco,1)) + ','
-        angle = str(round(ang1 - ang4, 1)) + ' degrees'
-        
-        #calculate the position where the text will be placed on image
-        position_red = tuple([int((source[0][0]+cx)/2-200), int((source[0][1]+cy)/2)-50])
-        position_yellow = tuple([int((source[0][0]+cx)/2+50), int((source[0][1]+cy)/2)-50])
-        
-        #write the text onto the image
-        cv2.putText(frame, dist_aruco, position_red, font, 3.0, (0, 0, 255), 6, cv2.LINE_AA)
-        cv2.putText(frame, angle, position_yellow, font, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
+# def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, ang1=0, ang4=0):
+#     #draw the line from source of the measurement to the closest point of the vehicle
+#     cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(point[0]), int(point[1])), (0,255,255), 5)
+#
+#     #draw the line from source of the measurement to the centre of vehicle' Aruco marker
+#     cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(cx), int(cy)), (0,0,255), 5)
+#
+#     if showDistancesOnImage:
+#         font = cv2.FONT_HERSHEY_SIMPLEX
+#
+#         #calculate angles and position and convert them to text
+#         dist_aruco = str(round(dist_aruco,1)) + ','
+#         angle = str(round(ang1 - ang4, 1)) + ' degrees'
+#
+#         #calculate the position where the text will be placed on image
+#         position_red = tuple([int((source[0][0]+cx)/2-200), int((source[0][1]+cy)/2)-50])
+#         position_yellow = tuple([int((source[0][0]+cx)/2+50), int((source[0][1]+cy)/2)-50])
+#
+#         #write the text onto the image
+#         cv2.putText(frame, dist_aruco, position_red, font, 3.0, (0, 0, 255), 6, cv2.LINE_AA)
+#         cv2.putText(frame, angle, position_yellow, font, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
 
 
 def convert_angles(rvec):
