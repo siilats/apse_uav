@@ -35,10 +35,8 @@ def waitForMovementExecuted(id_):
 maxVel = 0.1
 maxAccel = 0.01
 
-base = np.array([0, -0.65, 0.25])
-yoke = np.array([0.275, -0.255, 0.6])
-
-target = yoke - base
+base = [0, -0.65, 0.25, 0, 0, 0, 0]
+yoke = [0.275, -0.255, 0.6, 0, 0, 0, 0]
 
 # Start simulation:
 sim.startSimulation()
@@ -52,9 +50,7 @@ initialPose, initialConfig = sim.callScriptFunction('remoteApi_getPoseAndConfig'
 
 # Send first movement sequence:
 
-targetPoseNp = np.array(initialPose)
-targetPoseNp[0:3] = targetPoseNp[0:3] + target
-targetPose = targetPoseNp.tolist()
+targetPose = yoke
 
 movementData = {
     'id': 'movSeq1',
