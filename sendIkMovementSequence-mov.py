@@ -5,11 +5,17 @@
 # Do not launch simulation, then run this script
 
 from zmqRemoteApi import RemoteAPIClient
+import time
+import numpy as np
 
 print('Program started')
 
 client = RemoteAPIClient()
 sim = client.getObject('sim')
+
+sim.stopSimulation()
+while sim.getSimulationState() != sim.simulation_stopped:
+    time.sleep(0.1)
 
 executedMovId = 'notReady'
 targetArm = '/z1_robot'
@@ -29,8 +35,14 @@ def waitForMovementExecuted(id_):
 maxVel = 0.1
 maxAccel = 0.01
 
+base = np.array([0, -0.65, 0.25])
+yoke = np.array([0.275, -0.255, 0.6])
+
+target = yoke - base
+
 # Start simulation:
 sim.startSimulation()
+
 
 # Wait until ready:
 waitForMovementExecuted('ready')
@@ -39,7 +51,11 @@ waitForMovementExecuted('ready')
 initialPose, initialConfig = sim.callScriptFunction('remoteApi_getPoseAndConfig',scriptHandle)
 
 # Send first movement sequence:
-targetPose = [0.2, 0, 0.40, 0, 0, 0, 1]
+
+targetPoseNp = np.array(initialPose)
+targetPoseNp[0:3] = targetPoseNp[0:3] + target
+targetPose = targetPoseNp.tolist()
+
 movementData = {
     'id': 'movSeq1',
     'type': 'mov',
