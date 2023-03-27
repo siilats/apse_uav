@@ -20,8 +20,12 @@ while sim.getSimulationState() != sim.simulation_stopped:
 executedMovId = 'notReady'
 targetArm = '/z1_robot'
 stringSignalName = targetArm + '_executedMovId'
-objHandle = sim.getObject(targetArm)
-scriptHandle = sim.getScript(sim.scripttype_childscript,objHandle)
+robotBaseHandle = sim.getObject(targetArm)
+scriptHandle = sim.getScript(sim.scripttype_childscript, robotBaseHandle)
+
+tipHandle = sim.getObject('/tip')
+targetHandle = sim.getObject('/target')
+yokeBoardHandle = sim.getObject('/yokeBoard')
 
 
 def waitForMovementExecuted(id_):
@@ -30,27 +34,42 @@ def waitForMovementExecuted(id_):
         s = sim.getStringSignal(stringSignalName)
         executedMovId = s
 
+def waitForMovementExecutedAsync(id_):
+    global executedMovId
+    while executedMovId != id_:
+        s = sim.waitForSignal(id_)
+        if s is True:
+            executedMovId = id_
+
 
 # Set-up some movement variables:
 maxVel = 0.1
 maxAccel = 0.01
 
-base = [0, -0.65, 0.25, 0, 0, 0, 0]
-yoke = [0.275, -0.255, 0.6, 0, 0, 0, 0]
+# base = [0, -0.65, 0.25, 0, 0, 0, 0]
+# yoke = [0.275, -0.255, 0.6, 0, 0, 0, 0]
+# Send movement sequences:
+tip_rb = sim.getObjectPose(tipHandle, robotBaseHandle)
+yoke_rb = sim.getObjectPose(yokeBoardHandle, robotBaseHandle)
+yoke_rb_matrix = sim.poseToMatrix(yoke_rb)
+yoke_rb_euler = sim.getEulerAnglesFromMatrix(yoke_rb_matrix)
+
+print('yoke_rb_euler xyz: ', yoke_rb_euler[0], yoke_rb_euler[1] - np.pi / 2, yoke_rb_euler[2] + np.pi / 2)
+print('yoke_rb_xyz: ', yoke_rb[0], yoke_rb[1], yoke_rb[2])
 
 # Start simulation:
 sim.startSimulation()
 
 
 # Wait until ready:
-waitForMovementExecuted('ready')
+waitForMovementExecutedAsync('z1_ready')
 
 # Get initial pose:
-initialPose, initialConfig = sim.callScriptFunction('remoteApi_getPoseAndConfig',scriptHandle)
-
+initialPose, initialConfig = sim.callScriptFunction('remoteApi_getPoseAndConfig_base',scriptHandle)
+zeroPose = [0.5, 0, 0.5, 0, 0, 0, 1]
 # Send first movement sequence:
 
-targetPose = yoke
+targetPose = zeroPose
 
 movementData = {
     'id': 'movSeq1',
@@ -65,14 +84,12 @@ sim.callScriptFunction('remoteApi_movementDataFunction',scriptHandle,movementDat
 sim.callScriptFunction('remoteApi_executeMovement',scriptHandle,'movSeq1')
 
 # Wait until above movement sequence finished executing:
-waitForMovementExecuted('movSeq1')
+waitForMovementExecutedAsync('movSeq1')
 
 # Send second and third movement sequence, where third one should execute
 # immediately after the second one:
-targetPose = [
-    0.2, 0, 0.4,
-    -0.7071068883, -6.252754758e-08, -8.940695295e-08, -0.7071067691
-]
+targetPose = yoke_rb
+
 movementData = {
     'id': 'movSeq2',
     'type': 'mov',
@@ -95,7 +112,7 @@ sim.callScriptFunction('remoteApi_executeMovement',scriptHandle,'movSeq2')
 sim.callScriptFunction('remoteApi_executeMovement',scriptHandle,'movSeq3')
 
 # Wait until above 2 movement sequences finished executing:
-waitForMovementExecuted('movSeq3')
+waitForMovementExecutedAsync('movSeq3')
 
 sim.stopSimulation()
 
