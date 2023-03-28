@@ -969,8 +969,8 @@ while k <= stop_frame and (useImages or (useVideo and video.isOpened())):
             break
     
     #save results to a file
-    if saveResults:
-        outputData(file)
+    # if saveResults:
+    #     outputData(file)
     
     #save images to a folder
     if saveImages:
