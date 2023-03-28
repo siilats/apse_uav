@@ -243,94 +243,16 @@ def centroidFromAruco(veh_coords, tvec, rvec, size_corr, mtx, dist):
 
     return imgpts
 
-def drawBoundingBox(tvec, rvec, veh_dim, size_corr, mtx, dist, frame):
-    #calculate angles in horizontal and vertical direction
-    alpha_h = np.arctan(tvec[0]/tvec[2])
-    alpha_v = np.arctan(tvec[1]/tvec[2])
-
-    #calucalate yaw angle of the vehicle
-    r = R.from_rotvec(rvec)
-    yaw = round(r.as_euler('zxy', degrees=True)[0],2)
-
-    #based on yaw angle of the vehicle, alpha angles may be negative
-    alpha_h = alpha_h if yaw < 0 else -alpha_h
-    alpha_v = alpha_v if yaw < 0 else -alpha_v
-
-    #modify dimensions of vehicle's bbox
-    veh_dim = np.multiply(veh_dim, [1-alpha_h/2, 1+alpha_h/2, 1-alpha_v/2, 1+alpha_v/2])
-
-    #use modified values to set corners of bbox, project these points onto the image and draw bbox
-    axis = np.float32([[veh_dim[2],veh_dim[0],0], [veh_dim[2],veh_dim[1],0], [veh_dim[3],veh_dim[1],0], [veh_dim[3],veh_dim[0],0]])
-    imgpts, _ = cv2.projectPoints(axis, rvec, tvec/size_corr, mtx, dist)
-    imgpts = np.maximum(0,np.int32(imgpts).reshape(-1,2))
-    cv2.drawContours(frame, [imgpts[0:4]], -1, (255,0,0), 5)
-
-    return veh_dim
-
-def generatePointsBoundingBox(veh_dim):
-    #generate additional points on bounding box - 20 along the length and 8 along the width of the vehicle
-    points_l = 20
-    points_w = 8
-
-    o1 = np.linspace(veh_dim[0], veh_dim[1], points_l)
-    o2 = np.linspace(veh_dim[2], veh_dim[3], points_w)
-
-    object1 = np.zeros((points_l,2))
-    object2 = np.zeros((points_l,2))
-    object3 = np.zeros((points_w,2))
-    object4 = np.zeros((points_w,2))
-
-    object1[:,0] = o1
-    object1[:,1] = veh_dim[2]
-    object2[:,0] = o1
-    object2[:,1] = veh_dim[3]
-    object3[:,0] = veh_dim[0]
-    object3[:,1] = o2
-    object4[:,0] = veh_dim[1]
-    object4[:,1] = o2
-
-    #concatenate the points generated on each edge of bbox
-    object = np.concatenate((object1, object2, object3, object4))
-    w, h = object.shape
-    bbox = np.zeros((w, h+1))
-
-    bbox[:,0] = object[:,1]
-    bbox[:,1] = object[:,0]
-    bbox[:,2] = 0
-
-    return bbox
-
-def findMinimumDistanceBoundingBox(source, bbox, tvec, rvec, size_corr, mtx, dist):
-    #project generated bbox points onto image
-    imgpts, _ = cv2.projectPoints(bbox, rvec, tvec/size_corr, mtx, dist)
-    imgpts = np.maximum(0,np.int32(imgpts).reshape(-1,2))
-
-    #find minimum distance between source of signal and generated bbox points
-    distance = np.inf
-    index = 0
-    for i in range(len(imgpts)):
-        d = np.sqrt(pow(source[0][0]-imgpts[i][0],2) + pow(source[0][1]-imgpts[i][1],2))
-        if(d < distance):
-            distance = d
-            index = i
-
-    #return the closest point
-    return imgpts[index]
-
-def calculateDistance(lidar, aruco, bbox, markerLength, msp4, msp):
+def calculateDistance(lidar, aruco, markerLength, msp4, msp):
     #calculate distances to Aruco marker and bbox of the vehicle
     d_aruco = np.sqrt((lidar[0][0]-aruco[0][0]) * (lidar[0][0]-aruco[0][0]) + (lidar[0][1]-aruco[0][1]) * (lidar[0][1]-aruco[0][1]))
-    d_bbox = np.sqrt((lidar[0][0]-bbox[0][0]) * (lidar[0][0]-bbox[0][0]) + (lidar[0][1]-bbox[0][1]) * (lidar[0][1]-bbox[0][1]))
 
     #convert distances from pixels to metres
     dist_aruco = d_aruco * markerLength / ((msp4+msp)/2)
-    dist_bbox = d_bbox * markerLength / ((msp4+msp)/2)
 
-    return dist_aruco, dist_bbox
+    return dist_aruco
 
-def drawLinesOnImage(source, point, cx, cy, dist_aruco, angle, veh_id, frame, draw_settings, ang1=0, ang4=0):
-    #draw the line from source of the measurement to the closest point of the vehicle
-    cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(point[0]), int(point[1])), (0,255,255), 5)
+def drawLinesOnImage(source, cx, cy, dist_aruco, frame, draw_settings, ang1=0, ang4=0):
 
     #draw the line from source of the measurement to the centre of vehicle' Aruco marker
     cv2.line(frame, (int(source[0][0]), int(source[0][1])), (int(cx), int(cy)), (0,0,255), 5)
@@ -450,14 +372,13 @@ def draw_everything(draw_settings,corners,frame, mtx, dist, rvec, tvec, markerLe
         printDataOnImage(corners[0], rvec, tvec, id, marker_div,frame)
 
 def calculate_everything(config, moving_car_corners, tvec, rvec,
-    cx4_prev, cy4_prev, k, msp4_avg, veh4_coords, veh4_dim, N_avg, mtx, dist, frame ):
+    cx4_prev, cy4_prev, k, msp4_avg, veh4_coords, veh4_dim, N_avg, mtx, dist ):
     cx4, cy4, msp, diff4, ang4 = getMarkerData(moving_car_corners, rvec,
                                                None if k == config.frames.start else cx4_prev,
                                                None if k == config.frames.start else cy4_prev, config.marker_length)  # get detected marker parameters
     size_corr4, msp4 = calculateAverageMarkerSize(msp4_avg, msp, N_avg)  # marker size averaging
     imgpts_veh4 = centroidFromAruco(veh4_coords, tvec, rvec,
                                     size_corr4, mtx, dist)  # calculate centroid of the vehicle wrt. Aruco marker
-    veh4_dim = drawBoundingBox(tvec, rvec, veh4_dim, size_corr4, mtx, dist, frame)
-    return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4, veh4_dim
+    return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4
     # draw bounding box of the vehicle
 

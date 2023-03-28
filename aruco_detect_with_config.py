@@ -161,45 +161,39 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 base_car_index = np.argwhere(base_car_idx).ravel()[0]
                 base_car_corners = corners[base_car_index][0]
                 base_car_detected = 1
-                cx1, cy1, msp, diff1, ang1, size_corr1, msp1, imgpts_veh1, veh1_dim = \
+                cx1, cy1, msp, diff1, ang1, size_corr1, msp1, imgpts_veh1 = \
                     calculate_everything(config, base_car_corners,
                                          tvec[base_car_index], rvec[base_car_index],
-                                         cx1_prev, cy1_prev, k, msp1_avg, veh1_coords, veh1_dim, N_avg, mtx, dist, frame)
+                                         cx1_prev, cy1_prev, k, msp1_avg, veh1_coords, veh1_dim, N_avg, mtx, dist)
                 draw_everything(draw_settings, base_car_corners, frame, mtx, dist, rvec[base_car_index],
                                 tvec[base_car_index], markerLength, config.base_car)
-                bbox1 = generatePointsBoundingBox(veh1_dim)  # generate additional points for bounding box
                 cx1_prev, cy1_prev = cx1, cy1  # save position of the marker in the image
 
             if np.any(base_car_idx):
                 moving_car_index = np.argwhere(moving_car_idx).ravel()[0]
                 moving_car_corners = corners[moving_car_index][0]
                 moving_car_detected = 1
-                bbox4 = generatePointsBoundingBox(veh1_dim)  # generate additional points for bounding box
-                cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4, veh4_dim = \
+                cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4 = \
                     calculate_everything(config, moving_car_corners,
                                          tvec[moving_car_index], rvec[moving_car_index],
-                                         cx4_prev, cy4_prev, k, msp4_avg, veh4_coords, veh4_dim, N_avg, mtx, dist, frame)
+                                         cx4_prev, cy4_prev, k, msp4_avg, veh4_coords, veh4_dim, N_avg, mtx, dist)
                 draw_everything(draw_settings, moving_car_corners, frame, mtx, dist, rvec[moving_car_index],
                                 tvec[moving_car_index], markerLength, config.moving_car)
                 cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
 
             if moving_car_detected and base_car_detected:
-                point = findMinimumDistanceBoundingBox(np.float32([[cx4, cy4]]),
-                                                       bbox1, tvec[base_car_index], rvec[base_car_index], size_corr1,
-                                                       mtx, dist)  # find the closest point of the bbox from host's Arucbase_car_idxo
-                dist_veh1_aruco, dist_veh1_aruco_bbox = calculateDistance(np.float32([[cx4, cy4]]),
-                                                                          np.float32([[cx1, cy1]]), [point],
+                dist_veh1_aruco = calculateDistance(np.float32([[cx4, cy4]]),
+                                                                          np.float32([[cx1, cy1]]),
                                                                           markerLength, msp4,
                                                                           msp1)  # calculate distances in metres for Aruco method
                 if draw_settings.lines:
-                    drawLinesOnImage(np.float32([[cx4, cy4]]), point, cx1, cy1, dist_veh1_aruco, dist_veh1_aruco_bbox,
-                                     config.moving_car, frame, draw_settings, ang1, ang4)  #
+                    drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)  #
 
     #show results on image
     if setup.show_image:
         cv2.namedWindow("Detection result", cv2.WINDOW_NORMAL)
         cv2.imshow("Detection result", frame)
-        if 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     #increment frame number
     k = k + config.frames.step
