@@ -243,12 +243,12 @@ def centroidFromAruco(veh_coords, tvec, rvec, size_corr, mtx, dist):
 
     return imgpts
 
-def calculateDistance(lidar, aruco, markerLength, msp4, msp):
+def calculateDistance(lidar, aruco, markerLength, msp1, msp4):
     #calculate distances to Aruco marker and bbox of the vehicle
     d_aruco = np.sqrt((lidar[0][0]-aruco[0][0]) * (lidar[0][0]-aruco[0][0]) + (lidar[0][1]-aruco[0][1]) * (lidar[0][1]-aruco[0][1]))
 
     #convert distances from pixels to metres
-    dist_aruco = d_aruco * markerLength / ((msp4+msp)/2)
+    dist_aruco = d_aruco * markerLength / ((msp4+msp1)/2)
 
     return dist_aruco
 
