@@ -1,0 +1,20 @@
+capturing:
+  type: images
+  source: data/cam_params.json
+  save_results: false
+  save_images: false
+  output_path: your_path
+  frames:
+    step: 1
+    start: 1300
+    end: 1339
+setup:
+  show_image: true
+  draw_settings:
+    markers: true
+    marker_axes: false
+    id_pose_data: true
+    distance: true
+    leds: true
+    lines: true
+    points: false
