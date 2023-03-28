@@ -719,8 +719,8 @@ class ArucoDetect:
 
             #%%====================================
             #MARKER DETECTION AND POINTS CALCULATIONS
-            tvec = np.zeros((100,3))
-            rvec = np.zeros((100,3))
+            tvec = None
+            rvec = None
             #if any marker was detected
             if np.all(ids != None):
                 #estimate pose of detected markers

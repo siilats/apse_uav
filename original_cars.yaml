@@ -3,12 +3,25 @@ capturing:
   source: data/cam_params.json
   save_results: false
   save_images: false
-  output_path: your_path
+  use_images: true
+  use_video: false
+  path_input_images: "dynamic_images"
+  path_input_video: "./controltest.mp4"
+  marker_length: 0.55
+  use_boards: false
+  square_len: 0.064
+  marker_separation: 0.017
+  gamma: 2
+  grid_start: 24
+  grid_end: 27
+  base_car: 1
+  moving_car: 4
   frames:
     step: 1
     start: 1300
     end: 1339
 setup:
+  use_coppelia_sim: false
   show_image: true
   draw_settings:
     markers: true
