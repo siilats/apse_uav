@@ -4,6 +4,8 @@ import numpy as np
 import json
 import csv
 import os
+
+from func_timeout import func_timeout
 from scipy.spatial.transform import Rotation as R
 import time
 from zmqRemoteApi import RemoteAPIClient
@@ -40,8 +42,8 @@ if config.use_images:
 elif config.use_video:
     video = cv2.VideoCapture(config.path_input_video)
     k = config.frames.start
-    if config.frames.start > 1 and video.isOpened():
-        for i in range(config.frames.start-1):
+    if config.frames.start >= 1 and video.isOpened():
+        for i in range(config.frames.start):
             ret, frame = video.read()
             if ret == False:
                 break
@@ -51,7 +53,10 @@ height, width, channels = frame.shape
 
 if setup.use_coppelia_sim:
     client = RemoteAPIClient()
-    sim = client.getObject('sim')
+    try:
+        sim = func_timeout(3, lambda: client.getObject('sim'))
+    except:
+        raise IOError("Failed to connect to Coppeliasim, either open it or set setup.use_coppelia_sim to false")
     sim.stopSimulation()
     while sim.getSimulationState() != sim.simulation_stopped:
         time.sleep(0.1)
@@ -129,23 +134,20 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
 
             rvectmp, tvectmp = pick_rvec(base_rvecs, base_tvecs)
-            tvec[3] = tvectmp
-            rvec[3] = rvectmp
-            ids[3][0] = 4
-            ids[2][0] = 0
-            ids[1][0] = 0
-            ids[0][0] = 1
+            tvec[1] = tvectmp
+            rvec[1] = rvectmp
+            ids[1][0] = config.base_car
+            ids[0][0] = config.moving_car
             moving_car_detected = 1
-            base_car_detected = 1
+            base_ca_detected = 1
 
             cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_corners.squeeze(), rvec[0],
                                                              None if k == config.frames.start else cx1_prev,
                                                              None if k == config.frames.start else cy1_prev)  # get detected marker parameters
 
-            cx4, cy4, msp4, diff4, ang4 = getMarkerData(yoke_board_corners[0].squeeze(), rvec[3],
+            cx4, cy4, msp4, diff4, ang4 = getMarkerData(yoke_board_corners[0].squeeze(), rvec[1],
                                                              None if k == config.frames.start else cx4_prev,
                                                              None if k == config.frames.start else cy4_prev)  # get detected marker parameters
-
         else:
             # find the index of the moving car from ids using argwhere
             base_car_idx = (ids.ravel() == config.base_car)
@@ -172,8 +174,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 draw_everything(draw_settings, base_car_corners, frame, mtx, dist, rvec[base_car_index],
                                 tvec[base_car_index], markerLength, config.base_car)
                 cx1_prev, cy1_prev = cx1, cy1  # save position of the marker in the image
-
-
             if np.any(moving_car_idx):
                 moving_car_index = np.argwhere(moving_car_idx).ravel()[0]
                 moving_car_corners = corners[moving_car_index][0]
@@ -211,10 +211,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                                 tvec[moving_car_index], markerLength, config.moving_car)
                 cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
 
-            if moving_car_detected and base_car_detected:
-                dist_veh1_aruco = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx1, cy1]]), markerLength, msp1, msp4)  # calculate distances in metres for Aruco method
-                if draw_settings.lines:
-                    drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)  #
+        if moving_car_detected and base_car_detected:
+            dist_veh1_aruco = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx1, cy1]]), markerLength, msp1, msp4)  # calculate distances in metres for Aruco method
+            if draw_settings.lines:
+                drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)  #
 
         if setup.use_coppelia_sim:
             client.step()

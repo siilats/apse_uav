@@ -332,7 +332,8 @@ def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist):
     yoke_detector = aruco.ArucoDetector(dictionary=aruco_dict,
                                         refineParams=aruco.RefineParameters())
     # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
-    ids_for_planar_board = ids.ravel() >= config.grid_start and ids.ravel() <= config.grid_end
+
+    ids_for_planar_board = np.argwhere((ids.ravel() >= config.grid_start) & (ids.ravel() <= config.grid_end)).ravel()
     yoke_board_corners, yoke_board_ids, yoke_rejectedCorners, yoke_recoveredIdxs = \
         yoke_detector.refineDetectedMarkers(gray, yoke_board,
                                             np.asarray(corners)[ids_for_planar_board],

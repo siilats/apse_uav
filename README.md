@@ -34,6 +34,8 @@ Blachut, K., Danilowicz, M., Szolc, H. et al. Automotive Perception System Evalu
 
 ### Dependencies
 
+To install or update packages, run `make init`
+
 Tested on:
 - Ubuntu 18.04
 - Python 3.7.4
