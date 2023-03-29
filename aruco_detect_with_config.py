@@ -4,6 +4,8 @@ import numpy as np
 import json
 import csv
 import os
+
+from func_timeout import func_timeout
 from scipy.spatial.transform import Rotation as R
 import time
 from zmqRemoteApi import RemoteAPIClient
@@ -51,7 +53,10 @@ height, width, channels = frame.shape
 
 if setup.use_coppelia_sim:
     client = RemoteAPIClient()
-    sim = client.getObject('sim')
+    try:
+        sim = func_timeout(3, lambda: client.getObject('sim'))
+    except:
+        raise IOError("Failed to connect to Coppeliasim, either open it or set setup.use_coppelia_sim to false")
     sim.stopSimulation()
     while sim.getSimulationState() != sim.simulation_stopped:
         time.sleep(0.1)
