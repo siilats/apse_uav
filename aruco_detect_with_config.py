@@ -63,8 +63,8 @@ if setup.use_coppelia_sim:
     sim.loadScene(os.getcwd() + config.coppelia_path)
     visionSensor = sim.getObject('/Vision_sensor')
 
-    baseBoard = sim.getObject('/baseBoard')
-    yokeBoard = sim.getObject('/yokeBoard')
+    baseBoard = sim.getObject('/base_board')
+    yokeBoard = sim.getObject('/yoke_board')
     initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config)
 
     defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)

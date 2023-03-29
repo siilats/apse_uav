@@ -98,6 +98,7 @@ def readCameraParams(config):
 
     return mtx, dist
 
+
 def setArucoParameters():
     parameters = aruco.DetectorParameters()
 
@@ -314,21 +315,34 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
     base_board = aruco.CharucoBoard(base_board_size, squareLength=config.square_len,
                                     markerLength=config.marker_length, dictionary=aruco_dict,
                                     ids=np.arange(4))
+
     base_detector = aruco.CharucoDetector(base_board)
+    temp = base_detector.getCharucoParameters()
+    temp.minMarkers = 0
+    temp.tryRefineMarkers = True
     base_detector.setDetectorParameters(parameters)
+    base_detector.setCharucoParameters(temp)
     # define the planar aruco board and its detector
     # the default ids is np.arange(24, 27)
-    base_corners, base_ids, corners, ids = \
-        base_detector.detectBoard(gray)
+
+    #corners1, ids1, rejectedImgPoints1 = cv2.aruco.detectMarkers(gray, aruco_dict)
+    #detector = aruco.ArucoDetector(aruco_dict)
+    #detector.setDetectorParameters(parameters)
+    #corners, ids, rejected_img_points = detector.detectMarkers(gray)
+    #diamondCorners1, diamondIds1, corners, ids = base_detector.detectDiamonds(gray)
+    # num_corners21, corners21, ids21 = cv2.aruco.interpolateCornersCharuco(corners, ids, gray, base_board)
+
+
+    base_corners, base_ids, corners, ids = base_detector.detectBoard(gray)
 
     return base_corners, base_ids, corners, ids, base_board
 
 
 def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist):
-    yoke_board_size = (3, 1)
+    yoke_board_size = (config.grid_end - config.grid_start+1, 1)
     yoke_board = aruco.GridBoard(yoke_board_size, markerLength=config.marker_length,
                                  markerSeparation=config.marker_separation, dictionary=aruco_dict,
-                                 ids=np.arange(config.grid_start, config.grid_end))
+                                 ids=np.arange(config.grid_start, config.grid_end+1))
     yoke_detector = aruco.ArucoDetector(dictionary=aruco_dict,
                                         refineParams=aruco.RefineParameters())
     # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
