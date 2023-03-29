@@ -1,0 +1,40 @@
+capturing:
+  type: images
+  source: data/cam_params.json
+  save_results: false
+  save_images: false
+  use_images: true
+  use_video: false
+  coppelia_path: "/two_cars.ttt"
+  path_input_images: "dynamic_images"
+  path_input_video: "./controltest.mp4"
+  marker_length: 0.55
+  use_boards: false
+  square_len: 0.064
+  marker_separation: 0.017
+  gamma: 2
+  grid_start: 24
+  grid_end: 27
+  base_car: 1
+  moving_car: 4
+  frames:
+    step: 1
+    start: 1300
+    end: 1339
+  coppelia:
+    floor_level: 0.001
+    base_yaw: -90
+    yoke_yaw: 60
+    cam_height: 50
+
+setup:
+  use_coppelia_sim: true
+  show_image: true
+  draw_settings:
+    markers: true
+    marker_axes: false
+    id_pose_data: true
+    distance: true
+    leds: true
+    lines: true
+    points: false
