@@ -5,52 +5,38 @@ import json
 import csv
 import os
 from scipy.spatial.transform import Rotation as R
-
+import time
+from zmqRemoteApi import RemoteAPIClient
+import argparse
 
 from unitree import *
 
-model = ModelConfig.from_yaml_file('original_cars.yaml')
+parser = argparse.ArgumentParser(description='Name of the config file')
+parser.add_argument('--config', type=str,
+                    help='config file', default="two_cars.yaml")
+
+args = parser.parse_args()
+
+model = ModelConfig.from_yaml_file(args.config)
 setup = model.setup
+coppelia_config = model.capturing.coppelia
 draw_settings = setup.draw_settings
 config = model.capturing
 
-#number of frames to be used for marker size averaging, recommended is 1
-N_avg = 1
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+markerLength = config.marker_length #real size of the marker in metres
 
-markerLengthOrg = config.marker_length #real size of the marker in metres, this value does not change in algorithm
-markerLength = markerLengthOrg #real size of the marker in metres, this value changes in algorithm
- #correction for altitude estimation from marker
-div = 1.013 #additional correction for distance calculation (based on altitude test)
-DIFF_MAX = 2/3 * config.frames.step * 2 #maximum displacement of ArUco centre between frames with vehicle speed of 72 km/h = 20 m/s
-
-obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
-obj_points2 = np.array([[-markerLength / 2 , markerLength /  2, 0],
-                        [markerLength / 2, markerLength / 2, 0],
-                        [markerLength / 2, -markerLength / 2, 0],
-                        [-markerLength / 2, -markerLength / 2, 0]])
+obj_points, obj_points2 = obj_points_square(markerLength)
 
 parameters = setArucoParameters() #create Aruco detection parameters
 mtx, dist = readCameraParams(config) #read camera parameters
-msp1_avg, msp2_avg, msp3_avg, msp4_avg = setAverageMarkerSize(N_avg) #initialization of marker size averaging variables
-detected_ID_prev = [0,0,0,0] #initialization of vehicle detection state on previous frame
+
 [cx1_prev, cy1_prev, cx2_prev, cy2_prev, cx3_prev, cy3_prev, cx4_prev, cy4_prev] = np.zeros(8, dtype='int') #initialization of ArUco marker centres
 
-lookUpTable = gamma_lookup(config)
-
-#vehicle's centroid wrt. Aruco marker in metres
-veh4_coords = np.float32([[0,0.07,0]])
-veh1_coords = np.float32([[0,0.42,0]])
-veh2_coords = np.float32([[0,0.59,0]])
-veh3_coords = np.float32([[0,0.58,0]])
-
-#initialize values if images are used
 if config.use_images:
     k = config.frames.start
     config.frames.end = len(os.listdir(config.path_input_images)) if config.frames.end is None else config.frames.end
     frame = cv2.imread(config.path_input_images + "/image_%04d.png" % config.frames.start)
-
-#initialize values if video is used
 elif config.use_video:
     video = cv2.VideoCapture(config.path_input_video)
     k = config.frames.start
@@ -63,16 +49,34 @@ elif config.use_video:
     
 height, width, channels = frame.shape
 
-#calculate maps for undistortion
-mapx, mapy = cv2.initUndistortRectifyMap(mtx, dist, None, mtx, (width, height), 5)
+if setup.use_coppelia_sim:
+    client = RemoteAPIClient()
+    sim = client.getObject('sim')
+    sim.stopSimulation()
+    while sim.getSimulationState() != sim.simulation_stopped:
+        time.sleep(0.1)
+    sim.loadScene(os.getcwd() + config.coppelia_path)
+    visionSensor = sim.getObject('/Vision_sensor')
 
-#real vehicle dimensions in metres wrt. Aruco marker: back, front, left, right
-veh4_dim = [-2.35, 2.49, -0.86, 0.86]
-veh1_dim = [-1.95, 2.8, -0.9, 0.9]
-veh2_dim = [-1.68, 2.86, -0.87, 0.87]
-veh3_dim = [-1.32, 2.48, -0.86, 0.86]
+    baseBoard = sim.getObject('/baseBoard')
+    yokeBoard = sim.getObject('/yokeBoard')
+    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config)
 
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
 
+    # sim.handleVisionSensor(visionSensorHandle)
+
+    # Run a simulation in stepping mode:
+    client.setStepping(True)
+    sim.startSimulation()
+    client.step()
+    sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
+
+camera_location = None
+camera_orientation = None
+base_car_detected = 0
+moving_car_detected = 0
 
 #iterate over frames
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
@@ -83,12 +87,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
         ret, frame = video.read()
         if ret == False:
             break
-
-    detected_ID = [0,0,0,0] #by default no vehicle is detected in image
-
-    #frame preprocessing - camera distortion removal and config.gamma correction
-    frame = preprocessFrame(frame, mapx, mapy, lookUpTable)
-
     #convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     if config.use_boards:
@@ -101,20 +99,12 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # write me adaptive grayscale in opencv
     idx = np.argsort(ids.ravel())
     corner_not_tuple = np.array(corners)[idx]
-    corners = tuple(np.array(corners)[idx])
+    corners = tuple(corner_not_tuple)
     ids = ids[idx]
 
-    # write me adaptive grayscale in opencv
-
-
-    #%%====================================
-    #MARKER DETECTION AND POINTS CALCULATIONS
     tvec = np.zeros((len(ids),3))
     rvec = np.zeros((len(ids),3))
     for i in range(len(ids)):
-        # only markers with ID={1,2,3,4} are used at this moment
-        # rvectmp=rvec[i][0] #compartible w previous version
-        # tvectmp=tvec[i][0] #compartible w previous version
         flag, rvecs, tvecs, r2 = cv2.solvePnPGeneric(
             obj_points2, corners[i], mtx, dist,
             flags=cv2.SOLVEPNP_IPPE_SQUARE)
@@ -135,12 +125,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
             base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
 
-            # bug in cv.solvePnPGeneric
-            base_flag, base_rvecs, base_tvecs, base_reproj_error = cv2.solvePnPGeneric(base_obj_points,
-                                                                                       base_img_points,
-                                                                                       mtx,
-                                                                                       dist,
-                                                                                       flags=cv2.SOLVEPNP_IPPE)
+            base_flag, base_rvecs, base_tvecs, base_reproj_error = \
+                cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
 
             rvectmp, tvectmp = pick_rvec(base_rvecs, base_tvecs)
             tvec[3] = tvectmp
@@ -160,9 +146,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                                                              None if k == config.frames.start else cx4_prev,
                                                              None if k == config.frames.start else cy4_prev)  # get detected marker parameters
 
-            size_corr1, msp1 = calculateAverageMarkerSize(msp1_avg, msp1)  # marker size averaging
-            size_corr4, msp4 = calculateAverageMarkerSize(msp4_avg, msp4)  # marker size averaging
-
         else:
             # find the index of the moving car from ids using argwhere
             base_car_idx = (ids.ravel() == config.base_car)
@@ -171,6 +154,16 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             if np.any(base_car_idx):
                 base_car_index = np.argwhere(base_car_idx).ravel()[0]
                 base_car_corners = corners[base_car_index][0]
+                if setup.use_coppelia_sim:
+                    camera_orientation = rvec[base_car_index]
+                    camera_location = tvec[base_car_index]
+
+                    # First time detecting the base board move the camera and leave base board at 0,0,0
+                    if base_car_detected == 0:
+                        r1 = R.from_rotvec(camera_orientation)
+                        baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                        camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
+                        sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
                 base_car_detected = 1
                 cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_car_corners, rvec[base_car_index],
                                                            None if k == config.frames.start else cx1_prev,
@@ -180,10 +173,36 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                                 tvec[base_car_index], markerLength, config.base_car)
                 cx1_prev, cy1_prev = cx1, cy1  # save position of the marker in the image
 
-            if np.any(base_car_idx):
+
+            if np.any(moving_car_idx):
                 moving_car_index = np.argwhere(moving_car_idx).ravel()[0]
                 moving_car_corners = corners[moving_car_index][0]
                 moving_car_detected = 1
+                if setup.use_coppelia_sim and camera_location is not None:
+                    # move the yoke marker
+                    tvectmp_cp = tvec[moving_car_index] - camera_location
+                    tvectmp_cp[2] = coppelia_config.floor_level
+
+                    sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[1], tvectmp_cp[2]])
+
+                    r4 = R.from_rotvec(rvec[moving_car_index])
+                    moving_angle = r4.as_euler('zxy', degrees=True)[0]
+                    r1 = R.from_rotvec(camera_orientation)
+                    baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                    correction = -90 - baseBoard_orientation  # -7
+                    final_angle = 180 - moving_angle + correction
+
+                    # we have -90 and then angle4 is 120 and we want answe 45
+                    sim.setObjectOrientation(yokeBoard, -1,
+                                                  [180 / 360 * 2 * 3.1415, 0, final_angle / 360 * 2 * 3.1415])
+
+                    img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
+                    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+                    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+                    img_name = "image_{}.png".format(k)
+                    corners_t, ids_t = detectArucoMarkers(img, parameters)
+                    cv2.imwrite("test_video/" + img_name, img)
+                
                 cx4, cy4, msp4, diff4, ang4 = getMarkerData(moving_car_corners, rvec[moving_car_index],
                                                            None if k == config.frames.start else cx1_prev,
                                                            None if k == config.frames.start else cy1_prev,
@@ -197,6 +216,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 if draw_settings.lines:
                     drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)  #
 
+        if setup.use_coppelia_sim:
+            client.step()
     #show results on image
     if setup.show_image:
         cv2.namedWindow("Detection result", cv2.WINDOW_NORMAL)

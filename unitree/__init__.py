@@ -9,6 +9,13 @@ from scipy.spatial.transform import Rotation as R
 import cv2
 
 @dataclass
+class CoppeliaConfig:
+    floor_level: float
+    base_yaw: float
+    yoke_yaw: float
+    cam_height: float
+
+@dataclass
 class FramesConfig:
     step: int
     start: int
@@ -26,6 +33,7 @@ class CapturingConfig:
     path_input_images: str
     path_input_video: str
     frames: FramesConfig
+    coppelia: CoppeliaConfig
     marker_length: float
     use_boards: bool
     square_len: float
@@ -35,6 +43,7 @@ class CapturingConfig:
     grid_end: int
     base_car: int
     moving_car: int
+    coppelia_path: str
 
 @dataclass
 class DrawSettingsConfig:
@@ -382,3 +391,23 @@ def calculate_everything(config, moving_car_corners, tvec, rvec,
     return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4
     # draw bounding box of the vehicle
 
+def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config):
+    floor_level = coppelia_config.floor_level
+    sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
+    sim.setObjectOrientation(baseBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
+    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
+    above_orientation = [-180 / 360 * 2 * 3.1415, 0, 180 / 360 * 2 * 3.1415]
+    # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
+    # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
+    sim.setObjectOrientation(visionSensor, -1, above_orientation)
+    sim.setObjectPosition(visionSensor, -1, [0, 0, coppelia_config.cam_height])
+
+def obj_points_square(markerLength):
+    obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
+    obj_points2 = np.array([[-markerLength / 2, markerLength / 2, 0],
+                            [markerLength / 2, markerLength / 2, 0],
+                            [markerLength / 2, -markerLength / 2, 0],
+                            [-markerLength / 2, -markerLength / 2, 0]])
+
+    return obj_points, obj_points2
