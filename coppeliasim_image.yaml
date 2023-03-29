@@ -1,0 +1,33 @@
+capturing:
+  type: images
+  source: data/cam_params.json
+  save_results: false
+  save_images: false
+  use_images: true
+  use_video: false
+  path_input_images: "coppelia_images"
+  path_input_video: "./controltest.mp4"
+  marker_length: 0.05
+  use_boards: false
+  square_len: 0.064
+  marker_separation: 0.017
+  gamma: 2
+  grid_start: 24
+  grid_end: 27
+  base_car: 0
+  moving_car: 10
+  frames:
+    step: 1
+    start: 1300
+    end: 1300
+setup:
+  use_coppelia_sim: true
+  show_image: true
+  draw_settings:
+    markers: true
+    marker_axes: false
+    id_pose_data: true
+    distance: true
+    leds: true
+    lines: true
+    points: false
