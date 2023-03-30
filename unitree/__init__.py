@@ -15,6 +15,12 @@ class CoppeliaConfig:
     base_yaw: float
     yoke_yaw: float
     cam_height: float
+    gripper_board_x: float
+    gripper_board_y: float
+    gripper_board_z: float
+    gripper_board_pitch: float
+    gripper_board_yaw: float
+    gripper_board_roll: float
 
 @dataclass
 class FramesConfig:
@@ -407,22 +413,26 @@ def calculate_everything(config, moving_car_corners, tvec, rvec,
     return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4
     # draw bounding box of the vehicle
 
-def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard):
-    floor_level = coppelia_config.floor_level
+def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, tip):
+    floor_level = cc.floor_level
+    x = 360 / (2 * np.pi)
 
-    if coppelia_config.base_pitch == -90:
+    if cc.base_pitch == -90:
         sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -floor_level, +7.0000e-01])
     else:
         sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -1.0000e-03, floor_level])
+    sim.setObjectOrientation(baseBoard, -1, [cc.base_pitch / x, 0, cc.base_yaw / x])
 
-    sim.setObjectOrientation(baseBoard, -1, [coppelia_config.base_pitch / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
+    sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
+    sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
+
     sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
-    sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
-    above_orientation = [-180 / 360 * 2 * 3.1415, 0, 180 / 360 * 2 * 3.1415]
+    sim.setObjectOrientation(yokeBoard, -1, [180 / x, 0, cc.yoke_yaw / x])
+    above_orientation = [-180 / x, 0, 180 / x]
     # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
     # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
     sim.setObjectOrientation(visionSensor, -1, above_orientation)
-    sim.setObjectPosition(visionSensor, -1, [0, 0, coppelia_config.cam_height])
+    sim.setObjectPosition(visionSensor, -1, [0, 0, cc.cam_height])
 
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)

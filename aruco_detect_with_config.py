@@ -66,8 +66,20 @@ if setup.use_coppelia_sim:
     baseBoard = sim.getObject('/base_board')
     yokeBoard = sim.getObject('/yoke_board')
     gripperBoard = sim.getObject('/gripper_board')
+    tip = sim.getObject('/tip')
 
-    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard)
+    #read 6 joints of the robot
+    joints = []
+    for i in range(6):
+        joints.append(sim.getObject('/joint%d' % (i+1)))
+        if i+1 == 2:
+            sim.setJointPosition(joints[i], 90/180*np.pi)
+        elif i+1 == 3:
+            sim.setJointPosition(joints[i], -90/180*np.pi)
+        else:
+            sim.setJointPosition(joints[i], 0)
+
+    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip)
 
     defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     sim.setInt32Param(sim.intparam_idle_fps, 0)

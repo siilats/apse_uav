@@ -28,6 +28,12 @@ capturing:
     base_yaw: 0
     yoke_yaw: 60
     cam_height: 50
+    gripper_board_x: -0.079535
+    gripper_board_y: 0.0000205200
+    gripper_board_z: -0.021482
+    gripper_board_pitch: 0
+    gripper_board_roll: 90
+    gripper_board_yaw: 0
 setup:
   use_coppelia_sim: true
   show_image: true

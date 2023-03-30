@@ -26,8 +26,8 @@ scriptHandle = sim.getScript(sim.scripttype_childscript, robotBaseHandle)
 
 tipHandle = sim.getObject('/tip')
 targetHandle = sim.getObject('/target')
-yokeBoardHandle = sim.getObject('/yokeBoard')
-tipArucoHandle = sim.getObject('/middle_tip_marker')
+yokeBoardHandle = sim.getObject('/yoke_board')
+tipArucoHandle = sim.getObject('/gripper_board')
 
 
 def waitForMovementExecuted(id_):
