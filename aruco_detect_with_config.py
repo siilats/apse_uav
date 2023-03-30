@@ -50,6 +50,12 @@ elif config.use_video:
     config.frames.end = np.inf if config.frames.end is None else config.frames.end
     
 height, width, channels = frame.shape
+fov = 60.0
+focal_length = width / (2 * np.tan(fov * np.pi / 360))
+mtx = np.array([[focal_length, 0, width / 2],
+                [0, focal_length, height / 2],
+                [0, 0, 1]])
+dist = None
 
 if setup.use_coppelia_sim:
     client = RemoteAPIClient()
@@ -151,9 +157,23 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             base_flag, base_rvecs, base_tvecs, base_reproj_error = \
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
 
+
             rvectmp, tvectmp = pick_rvec(base_rvecs, base_tvecs)
             tvec[1] = tvectmp
             rvec[1] = rvectmp
+
+            cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
+
+            if setup.use_coppelia_sim:
+                camera_orientation = rvec[1]
+                camera_location = tvec[1]
+
+                # First time detecting the base board move the camera and leave base board at 0,0,0
+                if base_car_detected == 0:
+                    r1 = R.from_rotvec(camera_orientation)
+                    baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                    camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
+                    sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
 
             gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = create_grid_board(config, aruco_dict,
                                                             gray, corners, ids,mtx, dist, config.gripper, config.gripper+1)
@@ -253,7 +273,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
         if moving_car_detected and base_car_detected:
             dist_veh1_aruco = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx1, cy1]]), markerLength, msp1, msp4)  # calculate distances in metres for Aruco method
             if draw_settings.lines:
-                drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)  #
+                drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)
+                # drawLinesOnImage(np.float32([[cx5, cy5]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1,ang5)
 
         if setup.use_coppelia_sim:
             client.step()

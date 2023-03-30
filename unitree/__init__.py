@@ -454,10 +454,12 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
 
     above_orientation = [-180 / x, 0, 180 / x]
+    forward_orientation = [-1.1000e+02 / x, +2.0000e+01 / x, -1.8000e+02 / x]
+    forward_position = [-5.0000e-01, -1.2000e+00, +1.0000e+00]
     # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
     # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
-    sim.setObjectOrientation(visionSensor, -1, above_orientation)
-    sim.setObjectPosition(visionSensor, -1, [0, 0, cc.cam_height])
+    sim.setObjectOrientation(visionSensor, -1, forward_orientation)
+    sim.setObjectPosition(visionSensor, -1, forward_position)
 
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
