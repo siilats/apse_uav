@@ -433,13 +433,13 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectOrientation(baseBoard, -1, [cc.base_pitch / x, 0, cc.base_yaw / x])
 
     yoke_bg = sim.getObject('/yoke_background')
-    sim.setObjectPosition(yokeBoard, yoke_bg, [0, coppelia_config.yoke_board_y, floor_level * 3])
+    sim.setObjectPosition(yokeBoard, yoke_bg, [0, cc.yoke_board_y, floor_level * 3])
     sim.setObjectOrientation(yokeBoard, yoke_bg,
-                             [-180 / orientation_const, coppelia_config.yoke_board_pitch, -90 / orientation_const])
+                             [-180 / x, cc.yoke_board_pitch, -90 / x])
 
     sim.setObjectPosition(yoke_joint0, -1,
-                          [coppelia_config.yoke_joint_0_x, coppelia_config.yoke_joint_0_y, floor_level])
-    sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
+                          [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
+    sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, cc.yoke_yaw / 360 * 2 * 3.1415])
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
