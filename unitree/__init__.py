@@ -8,8 +8,17 @@ import cv2.aruco as aruco
 from scipy.spatial.transform import Rotation as R
 import cv2
 
+
 @dataclass
 class CoppeliaConfig:
+    yoke_board_y: float
+    yoke_board_roll: float
+    yoke_board_pitch: float
+    yoke_board_yaw: float
+
+    yoke_joint_0_x: float
+    yoke_joint_0_y: float
+
     floor_level: float
     base_pitch: int
     base_yaw: float
@@ -407,17 +416,23 @@ def calculate_everything(config, moving_car_corners, tvec, rvec,
     return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4
     # draw bounding box of the vehicle
 
-def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard):
+def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, yoke_joint0, yoke_joint1):
+    orientation_const = 360 * 2 * np.pi
     floor_level = coppelia_config.floor_level
 
     if coppelia_config.base_pitch == -90:
         sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -floor_level, +7.0000e-01])
     else:
         sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -1.0000e-03, floor_level])
-
     sim.setObjectOrientation(baseBoard, -1, [coppelia_config.base_pitch / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
-    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
+    yoke_bg = sim.getObject('/yoke_background')
+
+    sim.setObjectPosition(yokeBoard, yoke_bg, [0, coppelia_config.yoke_board_y, floor_level*3])
+    sim.setObjectOrientation(yokeBoard, yoke_bg, [-180 / orientation_const, coppelia_config.yoke_board_pitch, -90 / orientation_const])
+
+    sim.setObjectPosition(yoke_joint0, -1, [coppelia_config.yoke_joint_0_x, coppelia_config.yoke_joint_0_y, floor_level])
     sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
+
     above_orientation = [-180 / 360 * 2 * 3.1415, 0, 180 / 360 * 2 * 3.1415]
     # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
     # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)

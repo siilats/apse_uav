@@ -22,6 +22,14 @@ capturing:
     start: 1300
     end: 1300
   coppelia:
+    yoke_board_y: +1.2500e-01
+    yoke_board_roll: -180
+    yoke_board_pitch: -1.1850e-11
+    yoke_board_yaw: -9.0000e+01
+
+    yoke_joint_0_x: +3.5000e-01
+    yoke_joint_0_y: -1.5000e-01
+
     floor_level: 0.001
     floor_height: 0.7
     base_pitch: -90
