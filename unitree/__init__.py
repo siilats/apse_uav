@@ -447,22 +447,24 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectPosition(yokeBoard, yoke_bg, [0, cc.yoke_board_y, floor_level * 3])
     sim.setObjectOrientation(yokeBoard, yoke_bg, [cc.yoke_board_roll / x, cc.yoke_board_pitch, cc.yoke_board_yaw / x])
 
-    dash = sim.getObject('/dash')
-    sim.setObjectPosition(yoke_joint0, dash, [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
-    sim.setObjectOrientation(yoke_joint0, dash, [0, cc.yoke_joint_0_pitch / x, cc.yoke_joint_0_yaw / x])
-    
-    cylinder = 20  # parent of yoke_joint1
-    sim.setObjectPosition(yoke_joint1, cylinder, [cc.yoke_joint_1_x, cc.yoke_joint_1_y, cc.yoke_joint_1_z])
-    sim.setObjectOrientation(yoke_joint1, cylinder, [0, cc.yoke_joint_1_pitch / x, cc.yoke_joint_1_yaw / x])
+    # dash = sim.getObject('/dash')
+    # sim.setObjectPosition(yoke_joint0, dash, [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
+    # sim.setObjectOrientation(yoke_joint0, dash, [0, cc.yoke_joint_0_pitch / x, cc.yoke_joint_0_yaw / x])
+    #
+    # cylinder = 20  # parent of yoke_joint1
+    # sim.setObjectPosition(yoke_joint1, cylinder, [cc.yoke_joint_1_x, cc.yoke_joint_1_y, cc.yoke_joint_1_z])
+    # sim.setObjectOrientation(yoke_joint1, cylinder, [0, cc.yoke_joint_1_pitch / x, cc.yoke_joint_1_yaw / x])
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
 
     above_orientation = [-180 / x, 0, 180 / x]
+    forward_orientation = [-1.1000e+02 / x, +2.0000e+01 / x, -1.8000e+02 / x]
+    forward_position = [-5.0000e-01, -1.2000e+00, +1.0000e+00]
     # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
     # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)
-    sim.setObjectOrientation(visionSensor, -1, above_orientation)
-    sim.setObjectPosition(visionSensor, -1, [0, 0, cc.cam_height])
+    sim.setObjectOrientation(visionSensor, -1, forward_orientation)
+    sim.setObjectPosition(visionSensor, -1, forward_position)
 
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
