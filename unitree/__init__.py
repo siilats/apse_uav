@@ -19,6 +19,16 @@ class CoppeliaConfig:
     yoke_joint_0_x: float
     yoke_joint_0_y: float
 
+    yoke_joint_0_pitch: float
+    yoke_joint_0_yaw: float
+
+    yoke_joint_1_x: float
+    yoke_joint_1_y: float
+    yoke_joint_1_z: float
+
+    yoke_joint_1_pitch: float
+    yoke_joint_1_yaw: float
+
     floor_level: float
     base_pitch: int
     base_yaw: float
@@ -434,18 +444,19 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
 
     yoke_bg = sim.getObject('/yoke_background')
     sim.setObjectPosition(yokeBoard, yoke_bg, [0, cc.yoke_board_y, floor_level * 3])
-    sim.setObjectOrientation(yokeBoard, yoke_bg,
-                             [-180 / x, cc.yoke_board_pitch, -90 / x])
+    sim.setObjectOrientation(yokeBoard, yoke_bg, [cc.yoke_board_roll / x, cc.yoke_board_pitch, cc.yoke_board_yaw / x])
 
-    sim.setObjectPosition(yoke_joint0, -1,
-                          [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
-    sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, cc.yoke_yaw / 360 * 2 * 3.1415])
+    dash = sim.getObject('/dash')
+    sim.setObjectPosition(yoke_joint0, dash, [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
+    sim.setObjectOrientation(yoke_joint0, dash, [0, cc.yoke_joint_0_pitch / x, cc.yoke_joint_0_yaw / x])
+    
+    cylinder = 20  # parent of yoke_joint1
+    sim.setObjectPosition(yoke_joint1, cylinder, [cc.yoke_joint_1_x, cc.yoke_joint_1_y, cc.yoke_joint_1_z])
+    sim.setObjectOrientation(yoke_joint1, cylinder, [0, cc.yoke_joint_1_pitch / x, cc.yoke_joint_1_yaw / x])
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
 
-    sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
-    sim.setObjectOrientation(yokeBoard, -1, [180 / x, 0, cc.yoke_yaw / x])
     above_orientation = [-180 / x, 0, 180 / x]
     # sim.yawPitchRollToAlphaBetaGamma(visionSensorHandle, 180.0, 0.0, -180.0)
     # alpha, beta, gamma = sim.alphaBetaGammaToYawPitchRoll(-180/360*2*3.1415, 0, -180/360*2*3.1415)

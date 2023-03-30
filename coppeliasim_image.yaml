@@ -30,6 +30,16 @@ capturing:
     yoke_joint_0_x: +3.5000e-01
     yoke_joint_0_y: -1.5000e-01
 
+    yoke_joint_0_pitch: -9.0000e+01
+    yoke_joint_0_yaw: +1.1857e-11
+
+    yoke_joint_1_x: +5.0000e-02
+    yoke_joint_1_y: +1.3434e-14
+    yoke_joint_1_z: +2.7500e-01
+
+    yoke_joint_1_pitch: +9.0000e+01
+    yoke_joint_1_yaw: +9.0000e+01
+
     floor_level: 0.001
     floor_height: 0.7
     base_pitch: -90
