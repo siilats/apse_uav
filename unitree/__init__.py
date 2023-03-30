@@ -58,6 +58,7 @@ class CapturingConfig:
     grid_start: int
     grid_end: int
     base_car: int
+    gripper: int
     moving_car: int
     coppelia_path: str
 
@@ -354,11 +355,11 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
     return base_corners, base_ids, corners, ids, base_board
 
 
-def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist):
+def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_id, end_id):
     yoke_board_size = (config.grid_end - config.grid_start+1, 1)
     yoke_board = aruco.GridBoard(yoke_board_size, markerLength=config.marker_length,
                                  markerSeparation=config.marker_separation, dictionary=aruco_dict,
-                                 ids=np.arange(config.grid_start, config.grid_end+1))
+                                 ids=np.arange(start_id, end_id+1))
     yoke_detector = aruco.ArucoDetector(dictionary=aruco_dict,
                                         refineParams=aruco.RefineParameters())
     # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
