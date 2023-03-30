@@ -30,6 +30,7 @@ class CoppeliaConfig:
     yoke_joint_1_yaw: float
 
     floor_level: float
+    floor_height: float
     base_pitch: int
     base_yaw: float
     yoke_yaw: float
@@ -438,9 +439,9 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     x = 360 / (2 * np.pi)
 
     if cc.base_pitch == -90:
-        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -floor_level, +7.0000e-01])
+        sim.setObjectPosition(baseBoard, -1, [0, -floor_level, cc.floor_height])
     else:
-        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -1.0000e-03, floor_level])
+        sim.setObjectPosition(baseBoard, -1, [0, -1.0000e-03, floor_level])
     sim.setObjectOrientation(baseBoard, -1, [cc.base_pitch / x, 0, cc.base_yaw / x])
 
     yoke_bg = sim.getObject('/yoke_background')
@@ -474,3 +475,14 @@ def obj_points_square(markerLength):
                             [-markerLength / 2, -markerLength / 2, 0]])
 
     return obj_points, obj_points2
+
+
+def invert_vec(tvec, rvec):
+    R2, _ = cv2.Rodrigues(rvec)
+    # Invert the rotation matrix and translation vector
+    R_inv = np.transpose(R2)  # Transpose of R is the inverse for orthogonal matrices
+    tvec_inv = -np.dot(R_inv, tvec)
+    # Convert the inverse rotation matrix to an inverse rotation vector
+    rvec_inv, _ = cv2.Rodrigues(R_inv)
+
+    return tvec_inv, rvec_inv

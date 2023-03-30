@@ -106,6 +106,10 @@ base_car_detected = 0
 moving_car_detected = 0
 gripper_detected = 0
 
+
+
+
+
 #iterate over frames
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     #read frame from image or video
@@ -143,15 +147,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     #if any marker was detected
     if np.all(ids != None):
         if config.use_boards:
-            yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
-                create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
-            yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
-                yoke_obj_points, yoke_img_points, mtx, dist,
-                flags=cv2.SOLVEPNP_IPPE)
-            rvectmp, tvectmp = pick_rvec(yoke_rvecs, yoke_tvecs)
-            tvec[0] = tvectmp
-            rvec[0] = rvectmp
-
             base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
 
             base_flag, base_rvecs, base_tvecs, base_reproj_error = \
@@ -165,25 +160,60 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
 
             if setup.use_coppelia_sim:
-                R, _ = cv2.Rodrigues(rvec[1])
+                tvec_inv, rvec_inv = invert_vec(tvec[1], rvec[1])
 
-                # Invert the rotation matrix and translation vector
-                R_inv = np.transpose(R)  # Transpose of R is the inverse for orthogonal matrices
-                tvec_inv = -np.dot(R_inv, tvec[1])
-
-                # Convert the inverse rotation matrix to an inverse rotation vector
-                rvec_inv, _ = cv2.Rodrigues(R_inv)
-
-                camera_orientation = rvec_inv
+                camera_orientation = rvec_inv.ravel()
                 camera_location = tvec_inv
+
+                cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
+                check_vision_variable = sim.getObjectPosition(visionSensor, -1)
 
 
                 # First time detecting the base board move the camera and leave base board at 0,0,0
                 if base_car_detected == 0:
-                    r1 = R.from_rotvec(camera_orientation)
+                    r1 = R.from_rotvec(camera_orientation.ravel())
                     baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                    camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
+                    half_board = (config.marker_length + config.marker_separation) * 1.5
+                    camera_location_coppelia = [-camera_location[0] + half_board, camera_location[2]
+                                                , camera_location[1] + 0.7 - half_board]
                     sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
+
+            yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
+                create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
+            yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
+                yoke_obj_points, yoke_img_points, mtx, dist,
+                flags=cv2.SOLVEPNP_IPPE)
+            rvectmp, tvectmp = pick_rvec(yoke_rvecs, yoke_tvecs)
+            tvec[0] = tvectmp
+            rvec[0] = rvectmp
+
+            if setup.use_coppelia_sim and camera_location is not None:
+                # move the yoke marker
+                #tvectmp_cp = tvec[0] - camera_location
+                info = cv2.composeRT(rvectmp, tvectmp, camera_orientation, camera_location)
+                rvectmp_cp, tvectmp_cp = info[0].ravel(), info[1].ravel()
+                tvec_inv2, rvec_inv2 = invert_vec(tvec[0], rvec[0])
+                cv2.drawFrameAxes(frame, mtx, dist, rvec[0], tvec[0], 1)
+                yoke_board_w = sim.getObjectPosition(yokeBoard, -1)
+                sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[2], coppelia_config.floor_height - tvectmp_cp[1]])
+
+                r4 = R.from_rotvec(rvec[0])
+                moving_angle = r4.as_euler('zxy', degrees=True)[0]
+                r1 = R.from_rotvec(camera_orientation)
+                baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
+                correction = -90 - baseBoard_orientation  # -7
+                final_angle = 180 - moving_angle + correction
+
+                # we have -90 and then angle4 is 120 and we want answe 45
+                sim.setObjectOrientation(yokeBoard, -1,
+                                         [180 / 360 * 2 * 3.1415, 0, final_angle / 360 * 2 * 3.1415])
+
+                img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
+                img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+                img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+                img_name = "image_{}.png".format(k)
+                corners_t, ids_t = detectArucoMarkers(img, parameters)
+                cv2.imwrite("test_video/" + img_name, img)
 
             gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = create_grid_board(config, aruco_dict,
                                                             gray, corners, ids,mtx, dist, config.gripper, config.gripper+1)
