@@ -23,6 +23,8 @@ capturing:
     end: 1300
   coppelia:
     floor_level: 0.001
+    floor_height: 0.7
+    floor_orientation: -90
     base_yaw: -90
     yoke_yaw: 60
     cam_height: 50

@@ -65,7 +65,9 @@ if setup.use_coppelia_sim:
 
     baseBoard = sim.getObject('/base_board')
     yokeBoard = sim.getObject('/yoke_board')
-    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config)
+    gripperBoard = sim.getObject('/gripper_board')
+
+    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard)
 
     defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     sim.setInt32Param(sim.intparam_idle_fps, 0)

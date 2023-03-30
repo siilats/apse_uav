@@ -406,9 +406,14 @@ def calculate_everything(config, moving_car_corners, tvec, rvec,
     return cx4, cy4, msp, diff4, ang4, size_corr4, msp4, imgpts_veh4
     # draw bounding box of the vehicle
 
-def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config):
+def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard):
     floor_level = coppelia_config.floor_level
-    sim.setObjectPosition(baseBoard, -1, [0, 0, floor_level])
+
+    if coppelia_config.floor_orientation == -90:
+        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, floor_level, -1.0000e-03])
+    else:
+        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -1.0000e-03, floor_level])
+
     sim.setObjectOrientation(baseBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
     sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
     sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
