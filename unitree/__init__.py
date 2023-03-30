@@ -367,7 +367,7 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
 
 
 def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_id, end_id):
-    yoke_board_size = (config.grid_end - config.grid_start+1, 1)
+    yoke_board_size = (end_id - start_id + 1, 1)
     yoke_board = aruco.GridBoard(yoke_board_size, markerLength=config.marker_length,
                                  markerSeparation=config.marker_separation, dictionary=aruco_dict,
                                  ids=np.arange(start_id, end_id+1))
@@ -449,7 +449,7 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectOrientation(yokeBoard, yoke_bg, [cc.yoke_board_roll / x, cc.yoke_board_pitch, cc.yoke_board_yaw / x])
 
     sim.setJointPosition(yoke_joint0, 0)
-    sim.setJointPosition(yoke_joint1, 0)
+    sim.setJointPosition(yoke_joint1, 15 / x)
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])

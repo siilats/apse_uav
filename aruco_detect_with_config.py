@@ -105,7 +105,7 @@ camera_orientation = None
 base_car_detected = 0
 moving_car_detected = 0
 gripper_detected = 0
-
+yoke_angle = None
 
 
 
@@ -198,15 +198,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[2], coppelia_config.floor_height - tvectmp_cp[1]])
 
                 r4 = R.from_rotvec(rvec[0])
-                moving_angle = r4.as_euler('zxy', degrees=True)[0]
-                r1 = R.from_rotvec(camera_orientation)
-                baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                correction = -90 - baseBoard_orientation  # -7
-                final_angle = 180 - moving_angle + correction
-
-                # we have -90 and then angle4 is 120 and we want answe 45
-                sim.setObjectOrientation(yokeBoard, -1,
-                                         [180 / 360 * 2 * 3.1415, 0, final_angle / 360 * 2 * 3.1415])
+                yoke_angle = r4.as_euler('zxy', degrees=True)[0]
+                sim.setJointPosition(yoke_joint1, -yoke_angle / 360 * 2 * 3.1415)
 
                 img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
                 img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
@@ -224,6 +217,20 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             tvec[2] = tvectmp
             rvec[2] = rvectmp
 
+            if setup.use_coppelia_sim and camera_location is not None and yoke_angle is not None:
+                # move the yoke marker
+                # tvectmp_cp = tvec[0] - camera_location
+                info = cv2.composeRT(rvectmp, tvectmp, camera_orientation, camera_location)
+                rvectmp_cp, tvectmp_cp = info[0].ravel(), info[1].ravel()
+                tvec_inv2, rvec_inv2 = invert_vec(tvec[0], rvec[0])
+                cv2.drawFrameAxes(frame, mtx, dist, rvec[0], tvec[0], 1)
+                yoke_board_w = sim.getObjectPosition(yokeBoard, -1)
+                sim.setObjectPosition(yokeBoard, -1,
+                                      [tvectmp_cp[0], -tvectmp_cp[2], coppelia_config.floor_height - tvectmp_cp[1]])
+
+                r4 = R.from_rotvec(rvec[0])
+                yoke_angle = r4.as_euler('zxy', degrees=True)[0]
+                sim.setJointPosition(yoke_joint1, -yoke_angle / 360 * 2 * 3.1415)
 
             ids[0][0] = config.moving_car
             ids[1][0] = config.base_car
@@ -285,11 +292,11 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                     sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[1], tvectmp_cp[2]])
 
                     r4 = R.from_rotvec(rvec[moving_car_index])
-                    moving_angle = r4.as_euler('zxy', degrees=True)[0]
+                    yoke_angle = r4.as_euler('zxy', degrees=True)[0]
                     r1 = R.from_rotvec(camera_orientation)
                     baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
                     correction = -90 - baseBoard_orientation  # -7
-                    final_angle = 180 - moving_angle + correction
+                    final_angle = 180 - yoke_angle + correction
 
                     # we have -90 and then angle4 is 120 and we want answe 45
                     sim.setObjectOrientation(yokeBoard, -1,
