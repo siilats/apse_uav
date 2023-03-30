@@ -165,8 +165,18 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
 
             if setup.use_coppelia_sim:
-                camera_orientation = rvec[1]
-                camera_location = tvec[1]
+                R, _ = cv2.Rodrigues(rvec[1])
+
+                # Invert the rotation matrix and translation vector
+                R_inv = np.transpose(R)  # Transpose of R is the inverse for orthogonal matrices
+                tvec_inv = -np.dot(R_inv, tvec[1])
+
+                # Convert the inverse rotation matrix to an inverse rotation vector
+                rvec_inv, _ = cv2.Rodrigues(R_inv)
+
+                camera_orientation = rvec_inv
+                camera_location = tvec_inv
+
 
                 # First time detecting the base board move the camera and leave base board at 0,0,0
                 if base_car_detected == 0:
