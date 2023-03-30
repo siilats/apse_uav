@@ -448,13 +448,8 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectPosition(yokeBoard, yoke_bg, [0, cc.yoke_board_y, floor_level * 3])
     sim.setObjectOrientation(yokeBoard, yoke_bg, [cc.yoke_board_roll / x, cc.yoke_board_pitch, cc.yoke_board_yaw / x])
 
-    # dash = sim.getObject('/dash')
-    # sim.setObjectPosition(yoke_joint0, dash, [cc.yoke_joint_0_x, cc.yoke_joint_0_y, floor_level])
-    # sim.setObjectOrientation(yoke_joint0, dash, [0, cc.yoke_joint_0_pitch / x, cc.yoke_joint_0_yaw / x])
-    #
-    # cylinder = 20  # parent of yoke_joint1
-    # sim.setObjectPosition(yoke_joint1, cylinder, [cc.yoke_joint_1_x, cc.yoke_joint_1_y, cc.yoke_joint_1_z])
-    # sim.setObjectOrientation(yoke_joint1, cylinder, [0, cc.yoke_joint_1_pitch / x, cc.yoke_joint_1_yaw / x])
+    sim.setJointPosition(yoke_joint0, 0)
+    sim.setJointPosition(yoke_joint1, 0)
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
