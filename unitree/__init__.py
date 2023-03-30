@@ -11,6 +11,7 @@ import cv2
 @dataclass
 class CoppeliaConfig:
     floor_level: float
+    base_pitch: int
     base_yaw: float
     yoke_yaw: float
     cam_height: float
@@ -409,12 +410,12 @@ def calculate_everything(config, moving_car_corners, tvec, rvec,
 def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard):
     floor_level = coppelia_config.floor_level
 
-    if coppelia_config.floor_orientation == -90:
-        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, floor_level, -1.0000e-03])
+    if coppelia_config.base_pitch == -90:
+        sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -floor_level, +7.0000e-01])
     else:
         sim.setObjectPosition(baseBoard, -1, [+0.0000e+00, -1.0000e-03, floor_level])
 
-    sim.setObjectOrientation(baseBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
+    sim.setObjectOrientation(baseBoard, -1, [coppelia_config.base_pitch / 360 * 2 * 3.1415, 0, coppelia_config.base_yaw / 360 * 2 * 3.1415])
     sim.setObjectPosition(yokeBoard, -1, [10, 0, floor_level])
     sim.setObjectOrientation(yokeBoard, -1, [180 / 360 * 2 * 3.1415, 0, coppelia_config.yoke_yaw / 360 * 2 * 3.1415])
     above_orientation = [-180 / 360 * 2 * 3.1415, 0, 180 / 360 * 2 * 3.1415]

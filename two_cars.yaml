@@ -23,6 +23,7 @@ capturing:
     end: 1339
   coppelia:
     floor_level: 0.001
+    base_pitch: 180
     base_yaw: -90
     yoke_yaw: 60
     cam_height: 50
