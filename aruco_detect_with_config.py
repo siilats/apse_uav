@@ -160,10 +160,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
 
             if setup.use_coppelia_sim:
-                tvec_inv, rvec_inv = invert_vec(tvec[1], rvec[1])
+                rvec_inv, tvec_inv = invert_vec(rvec[1], tvec[1])
 
-                camera_orientation = rvec_inv.ravel()
-                camera_location = tvec_inv
+                camera_orientation = rvec[1]
+                camera_location = tvec[1]
 
                 cv2.drawFrameAxes(frame, mtx, dist, rvec[1], tvec[1], 1)
                 check_vision_variable = sim.getObjectPosition(visionSensor, -1)
@@ -174,8 +174,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                     r1 = R.from_rotvec(camera_orientation.ravel())
                     baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
                     half_board = (config.marker_length + config.marker_separation) * 1.5
-                    camera_location_coppelia = [-camera_location[0] + half_board, camera_location[2]
-                                                , camera_location[1] + 0.7 - half_board]
+                    camera_location_coppelia = [-tvec_inv[0] + half_board, tvec_inv[2]
+                                                , tvec_inv[1] + 0.7 - half_board]
                     sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
 
             yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
@@ -190,9 +190,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             if setup.use_coppelia_sim and camera_location is not None:
                 # move the yoke marker
                 #tvectmp_cp = tvec[0] - camera_location
-                info = cv2.composeRT(rvectmp, tvectmp, camera_orientation, camera_location)
-                rvectmp_cp, tvectmp_cp = info[0].ravel(), info[1].ravel()
-                tvec_inv2, rvec_inv2 = invert_vec(tvec[0], rvec[0])
+                rvectmp_cp, tvectmp_cp = relative_position(rvec[0], tvec[0], camera_orientation, camera_location)
+                rvec_inv2, tvec_inv2 = invert_vec(rvec[0], tvec[0])
                 cv2.drawFrameAxes(frame, mtx, dist, rvec[0], tvec[0], 1)
                 yoke_board_w = sim.getObjectPosition(yokeBoard, -1)
                 sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[2], coppelia_config.floor_height - tvectmp_cp[1]])
@@ -216,16 +215,16 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             rvectmp, tvectmp = pick_rvec(gripper_rvecs, gripper_tvecs)
             tvec[2] = tvectmp
             rvec[2] = rvectmp
+            cv2.drawFrameAxes(frame, mtx, dist, rvec[2], tvec[2], 1)
 
-            if setup.use_coppelia_sim and camera_location is not None and yoke_angle is not None:
+            if setup.use_coppelia_sim and camera_location is not None:
                 # move the yoke marker
                 # tvectmp_cp = tvec[0] - camera_location
-                info = cv2.composeRT(rvectmp, tvectmp, camera_orientation, camera_location)
+                info = cv2.composeRT(camera_orientation, camera_location, rvectmp, tvectmp)
                 rvectmp_cp, tvectmp_cp = info[0].ravel(), info[1].ravel()
-                tvec_inv2, rvec_inv2 = invert_vec(tvec[0], rvec[0])
-                cv2.drawFrameAxes(frame, mtx, dist, rvec[0], tvec[0], 1)
-                yoke_board_w = sim.getObjectPosition(yokeBoard, -1)
-                sim.setObjectPosition(yokeBoard, -1,
+                rvec_inv2, tvec_inv2 = invert_vec(rvec[0], tvec[0])
+                gripper_board_w = sim.getObjectPosition(gripperBoard, -1)
+                sim.setObjectPosition(gripperBoard, -1,
                                       [tvectmp_cp[0], -tvectmp_cp[2], coppelia_config.floor_height - tvectmp_cp[1]])
 
                 r4 = R.from_rotvec(rvec[0])

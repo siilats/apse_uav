@@ -375,7 +375,7 @@ def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_i
                                         refineParams=aruco.RefineParameters())
     # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)
 
-    ids_for_planar_board = np.argwhere((ids.ravel() >= config.grid_start) & (ids.ravel() <= config.grid_end)).ravel()
+    ids_for_planar_board = np.argwhere((ids.ravel() >= start_id) & (ids.ravel() <= end_id)).ravel()
     yoke_board_corners, yoke_board_ids, yoke_rejectedCorners, yoke_recoveredIdxs = \
         yoke_detector.refineDetectedMarkers(gray, yoke_board,
                                             np.asarray(corners)[ids_for_planar_board],
@@ -472,7 +472,7 @@ def obj_points_square(markerLength):
     return obj_points, obj_points2
 
 
-def invert_vec(tvec, rvec):
+def invert_vec(rvec, tvec):
     R2, _ = cv2.Rodrigues(rvec)
     # Invert the rotation matrix and translation vector
     R_inv = np.transpose(R2)  # Transpose of R is the inverse for orthogonal matrices
@@ -480,4 +480,14 @@ def invert_vec(tvec, rvec):
     # Convert the inverse rotation matrix to an inverse rotation vector
     rvec_inv, _ = cv2.Rodrigues(R_inv)
 
-    return tvec_inv, rvec_inv
+    return rvec_inv, tvec_inv
+
+def relative_position(rvec1, tvec1,rvec2, tvec2):    # input tvec and tvec from each markers
+    rvec1, tvec1 = rvec1.reshape((3,1)), tvec1.reshape((3,1))   # reshape
+    rvec2, tvec2 =  rvec2.reshape((3,1)), tvec2.reshape((3,1)), # reshape
+    invrvec, invtvec = invert_vec(rvec2, tvec2)  # inverse second vector
+    info = cv2.composeRT(rvec1, tvec1, invrvec, invtvec) # conpose vec(AC) and vec(-BC)
+    composedRvec, composedTvec = info[0], info[1]   # get th e result
+    composedRvec = composedRvec.reshape((3,1))  # reshape
+    composedTvec = composedTvec.reshape((3,1))  # reshape
+    return composedRvec, composedTvec   # return resulted vector
