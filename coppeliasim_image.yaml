@@ -15,6 +15,7 @@ capturing:
   gamma: 2
   grid_start: 10
   grid_end: 13
+  gripper: 45
   base_car: 0
   moving_car: 10
   frames:

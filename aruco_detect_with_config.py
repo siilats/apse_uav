@@ -33,7 +33,7 @@ obj_points, obj_points2 = obj_points_square(markerLength)
 parameters = setArucoParameters() #create Aruco detection parameters
 mtx, dist = readCameraParams(config) #read camera parameters
 
-[cx1_prev, cy1_prev, cx2_prev, cy2_prev, cx3_prev, cy3_prev, cx4_prev, cy4_prev] = np.zeros(8, dtype='int') #initialization of ArUco marker centres
+[cx1_prev, cy1_prev, cx2_prev, cy2_prev, cx3_prev, cy3_prev, cx4_prev, cy4_prev, cx5_prev, cy5_prev] = np.zeros(10, dtype='int') #initialization of ArUco marker centres
 
 if config.use_images:
     k = config.frames.start
@@ -98,6 +98,7 @@ camera_location = None
 camera_orientation = None
 base_car_detected = 0
 moving_car_detected = 0
+gripper_detected = 0
 
 #iterate over frames
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
@@ -136,7 +137,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     #if any marker was detected
     if np.all(ids != None):
         if config.use_boards:
-            yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist)
+            yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
+                create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
             yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
                 yoke_obj_points, yoke_img_points, mtx, dist,
                 flags=cv2.SOLVEPNP_IPPE)
@@ -152,10 +154,25 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             rvectmp, tvectmp = pick_rvec(base_rvecs, base_tvecs)
             tvec[1] = tvectmp
             rvec[1] = rvectmp
-            ids[1][0] = config.base_car
+
+            gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = create_grid_board(config, aruco_dict,
+                                                            gray, corners, ids,mtx, dist, config.gripper, config.gripper+1)
+            gripper_flag, gripper_rvecs, gripper_tvecs, ggripper_r2 = cv2.solvePnPGeneric(
+                gripper_obj_points, gripper_img_points, mtx, dist,
+                flags=cv2.SOLVEPNP_IPPE)
+            rvectmp, tvectmp = pick_rvec(gripper_rvecs, gripper_tvecs)
+            tvec[2] = tvectmp
+            rvec[2] = rvectmp
+
+
             ids[0][0] = config.moving_car
+            ids[1][0] = config.base_car
+            ids[2][0] = config.gripper
+
             moving_car_detected = 1
             base_car_detected = 1
+            gripper_detected = 1
+
 
             cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_corners.squeeze(), rvec[0],
                                                              None if k == config.frames.start else cx1_prev,
@@ -164,6 +181,12 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             cx4, cy4, msp4, diff4, ang4 = getMarkerData(yoke_board_corners[0].squeeze(), rvec[1],
                                                              None if k == config.frames.start else cx4_prev,
                                                              None if k == config.frames.start else cy4_prev, markerLength)  # get detected marker parameters
+
+            cx5, cy5, msp5, diff5, ang5 = getMarkerData(gripper_board_corners[0].squeeze(), rvec[2],
+                                                        None if k == config.frames.start else cx5_prev,
+                                                        None if k == config.frames.start else cy5_prev,
+                                                        markerLength)  # get detected marker parameters
+
         else:
             # find the index of the moving car from ids using argwhere
             base_car_idx = (ids.ravel() == config.base_car)
