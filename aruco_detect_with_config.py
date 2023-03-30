@@ -139,15 +139,15 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             ids[1][0] = config.base_car
             ids[0][0] = config.moving_car
             moving_car_detected = 1
-            base_ca_detected = 1
+            base_car_detected = 1
 
             cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_corners.squeeze(), rvec[0],
                                                              None if k == config.frames.start else cx1_prev,
-                                                             None if k == config.frames.start else cy1_prev)  # get detected marker parameters
+                                                             None if k == config.frames.start else cy1_prev, markerLength)  # get detected marker parameters
 
             cx4, cy4, msp4, diff4, ang4 = getMarkerData(yoke_board_corners[0].squeeze(), rvec[1],
                                                              None if k == config.frames.start else cx4_prev,
-                                                             None if k == config.frames.start else cy4_prev)  # get detected marker parameters
+                                                             None if k == config.frames.start else cy4_prev, markerLength)  # get detected marker parameters
         else:
             # find the index of the moving car from ids using argwhere
             base_car_idx = (ids.ravel() == config.base_car)
