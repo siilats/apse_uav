@@ -66,10 +66,12 @@ if setup.use_coppelia_sim:
     sim.stopSimulation()
     while sim.getSimulationState() != sim.simulation_stopped:
         time.sleep(0.1)
-    sim.loadScene(os.getcwd() + config.coppelia_path)
+    # sim.loadScene(os.getcwd() + config.coppelia_path)
     visionSensor = sim.getObject('/Vision_sensor')
 
     baseBoard = sim.getObject('/base_board')
+    baseBoardCorner = sim.getObject('/base_board_corner')
+
     yokeBoard = sim.getObject('/yoke_board')
     gripperBoard = sim.getObject('/gripper_board')
     tip = sim.getObject('/tip')
@@ -88,7 +90,7 @@ if setup.use_coppelia_sim:
         else:
             sim.setJointPosition(joints[i], 0)
 
-    initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip, yoke_joint0, yoke_joint1)
+    #initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip, yoke_joint0, yoke_joint1)
 
     defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     sim.setInt32Param(sim.intparam_idle_fps, 0)
@@ -122,24 +124,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     if config.use_boards:
         base_corners, base_ids, corners, ids, base_board = detect_charuco_board(config, gray, aruco_dict, parameters)
         aruco.drawDetectedCornersCharuco(frame, base_corners, base_ids)
-        obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
-        flag, rvec_base, tvec_base = cv2.solvePnP(obj_points, img_points, mtx, None)
-        flag, rvecs_base, tvecs_base, r2 = cv2.solvePnPGeneric(
-            obj_points, img_points, mtx, None,
-            flags=cv2.SOLVEPNP_IPPE)
-        if flag:
-            rvec_base, tvec_base = pick_rvec_board(rvecs_base, tvecs_base)
-            R, _ = cv2.Rodrigues(rvec_base)
-            angle = np.pi
-            axis = np.array([0, 0, 1])
-            R_y = cv2.Rodrigues(angle * axis)[0]
-            R_new = np.dot(R_y, R)
-            rvec_base, _ = cv2.Rodrigues(R_new)
-            cv2.drawFrameAxes(frame, mtx, None, rvec_base, tvec_base, .2)
-            cv2.imshow('frame', frame)
-            cv2.waitKey(0)
-            generic_ang1 = convert_angles(rvecs_base[0].ravel())
-            generic_ang2 = convert_angles(rvecs_base[1].ravel())
     else:
         corners, ids = detectArucoMarkers(gray, parameters)
 
@@ -174,10 +158,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
             base_flag, base_rvecs, base_tvecs, base_reproj_error = \
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
+            obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+            base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
 
-            base_rvec, base_tvec = pick_rvec2(base_rvecs, base_tvecs)
-
-            ttc = np.array([-config.square_len*1.5, -config.square_len*1.5,  -10*config.square_len*1.5])
+            ttc = np.array([0.0, -config.square_len*1.5, 0.0])
             rrc = np.array([0.0, 0.0, 0.0])
             base_rvec_center, base_tvec_center = relative_position(base_rvec, base_tvec, rrc, ttc)
             cv2.drawFrameAxes(frame, mtx, dist, base_rvec_center, base_tvec_center, 1, thickness=5)
@@ -188,15 +172,15 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 base_rvec_inv_c, base_tvec_inv_c = invert_vec(base_rvec_center, base_tvec_center)
 
                 camera_w = sim.getObjectPosition(visionSensor, -1)
-
+                base_board_corner_w = sim.getObjectPosition(baseBoardCorner, -1)
+                camera_bb = sim.getObjectPosition(visionSensor, baseBoardCorner)
                 # First time detecting the base board move the camera and leave base board at 0,0,0
                 if base_car_detected == 0:
                     r1 = R.from_rotvec(base_rvec.ravel())
                     baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                    half_board = config.square_len   * 1.5
-                    camera_location_coppelia = [-base_tvec_inv_c[0][0], base_tvec_inv_c[2][0]
-                                                , base_tvec_inv_c[1][0]  + 0.7  ]
-                    sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
+                    camera_location_coppelia = [-base_tvec_inv[0][0], base_tvec_inv[1][0]
+                                                , -base_tvec_inv[2][0]  ]
+                    sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
 
             yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
                 create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)

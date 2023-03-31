@@ -340,11 +340,11 @@ def pick_rvec_board(rvecs, tvecs):
     generic_ang1 = convert_angles(rvecs[0].ravel())
     generic_ang2 = convert_angles(rvecs[1].ravel())
     if abs(generic_ang1[2] - 180) > abs(generic_ang2[2] - 180):
-        rvectmp = rvecs[0].ravel()
-        tvectmp = tvecs[0].ravel()
+        rvectmp = rvecs[0]
+        tvectmp = tvecs[0]
     else:
-        rvectmp = rvecs[1].ravel()
-        tvectmp = tvecs[1].ravel()
+        rvectmp = rvecs[1]
+        tvectmp = tvecs[1]
 
     return rvectmp, tvectmp
 def pick_rvec2(rvecs, tvecs):
