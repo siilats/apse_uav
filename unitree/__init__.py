@@ -336,6 +336,17 @@ def pick_rvec(rvecs, tvecs):
 
     return rvectmp, tvectmp
 
+def pick_rvec2(rvecs, tvecs):
+    generic_ang1 = convert_angles(rvecs[0].ravel())
+    generic_ang2 = convert_angles(rvecs[1].ravel())
+    if abs(generic_ang1[2] - 180) < abs(generic_ang2[2] - 180):
+        rvectmp = rvecs[0]
+        tvectmp = tvecs[0]
+    else:
+        rvectmp = rvecs[1]
+        tvectmp = tvecs[1]
+
+    return rvectmp, tvectmp
 
 def detect_charuco_board(config, gray, aruco_dict, parameters):
     base_board_size = (3, 3)
@@ -473,21 +484,23 @@ def obj_points_square(markerLength):
 
 
 def invert_vec(rvec, tvec):
-    R2, _ = cv2.Rodrigues(rvec)
-    # Invert the rotation matrix and translation vector
-    R_inv = np.transpose(R2)  # Transpose of R is the inverse for orthogonal matrices
-    tvec_inv = -np.dot(R_inv, tvec)
-    # Convert the inverse rotation matrix to an inverse rotation vector
-    rvec_inv, _ = cv2.Rodrigues(R_inv)
+    R, _ = cv2.Rodrigues(rvec)
+    R = np.transpose(R)
+    invTvec = -R @ tvec
+    invRvec, _ = cv2.Rodrigues(R)
+    return invRvec, invTvec
 
-    return rvec_inv, tvec_inv
+def relative_position(rvec1, tvec1, rvec2, tvec2):
+    rvec1, tvec1 = rvec1.reshape((3, 1)), tvec1.reshape(
+        (3, 1))
+    rvec2, tvec2 = rvec2.reshape((3, 1)), tvec2.reshape((3, 1))
 
-def relative_position(rvec1, tvec1,rvec2, tvec2):    # input tvec and tvec from each markers
-    rvec1, tvec1 = rvec1.reshape((3,1)), tvec1.reshape((3,1))   # reshape
-    rvec2, tvec2 =  rvec2.reshape((3,1)), tvec2.reshape((3,1)), # reshape
-    invrvec, invtvec = invert_vec(rvec2, tvec2)  # inverse second vector
-    info = cv2.composeRT(rvec1, tvec1, invrvec, invtvec) # conpose vec(AC) and vec(-BC)
-    composedRvec, composedTvec = info[0], info[1]   # get th e result
-    composedRvec = composedRvec.reshape((3,1))  # reshape
-    composedTvec = composedTvec.reshape((3,1))  # reshape
-    return composedRvec, composedTvec   # return resulted vector
+    # Inverse the second marker, the right one in the image
+    invRvec, invTvec = invert_vec(rvec2, tvec2)
+
+    info = cv2.composeRT(rvec1, tvec1, invRvec, invTvec)
+    composedRvec, composedTvec = info[0], info[1]
+
+    composedRvec = composedRvec.reshape((3, 1))
+    composedTvec = composedTvec.reshape((3, 1))
+    return composedRvec, composedTvec
