@@ -108,9 +108,6 @@ moving_car_detected = 0
 gripper_detected = 0
 yoke_angle = None
 
-
-
-
 #iterate over frames
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     #read frame from image or video
@@ -131,9 +128,16 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             obj_points, img_points, mtx, None,
             flags=cv2.SOLVEPNP_IPPE)
         if flag:
+            rvec_base, tvec_base = pick_rvec_board(rvecs_base, tvecs_base)
+            R, _ = cv2.Rodrigues(rvec_base)
+            angle = np.pi
+            axis = np.array([0, 0, 1])
+            R_y = cv2.Rodrigues(angle * axis)[0]
+            R_new = np.dot(R_y, R)
+            rvec_base, _ = cv2.Rodrigues(R_new)
             cv2.drawFrameAxes(frame, mtx, None, rvec_base, tvec_base, .2)
-            cv2.drawFrameAxes(frame, mtx, None, rvecs_base[0], tvecs_base[0], .2)
-            cv2.drawFrameAxes(frame, mtx, None, rvecs_base[1], tvecs_base[1], .2)
+            cv2.imshow('frame', frame)
+            cv2.waitKey(0)
             generic_ang1 = convert_angles(rvecs_base[0].ravel())
             generic_ang2 = convert_angles(rvecs_base[1].ravel())
     else:
