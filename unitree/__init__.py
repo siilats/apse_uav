@@ -348,6 +348,18 @@ def pick_rvec2(rvecs, tvecs):
 
     return rvectmp, tvectmp
 
+def pick_rvec_wrong(rvecs, tvecs):
+    generic_ang1 = convert_angles(rvecs[0].ravel())
+    generic_ang2 = convert_angles(rvecs[1].ravel())
+    if abs(generic_ang1[2] - 180) > abs(generic_ang2[2] - 180):
+        rvectmp = rvecs[0]
+        tvectmp = tvecs[0]
+    else:
+        rvectmp = rvecs[1]
+        tvectmp = tvecs[1]
+
+    return rvectmp, tvectmp
+
 def detect_charuco_board(config, gray, aruco_dict, parameters):
     base_board_size = (3, 3)
     marker_len = config.marker_length
@@ -497,6 +509,12 @@ def relative_position(rvec1, tvec1, rvec2, tvec2):
 
     # Inverse the second marker, the right one in the image
     invRvec, invTvec = invert_vec(rvec2, tvec2)
+
+    R1, _ = cv2.Rodrigues(rvec1)
+    R2, _ = cv2.Rodrigues(invRvec)
+    R3 = R2 @ R1
+    rvec3, _ = cv2.Rodrigues(R3)
+    tvec3 = R2 @ tvec1 + invTvec
 
     info = cv2.composeRT(rvec1, tvec1, invRvec, invTvec)
     composedRvec, composedTvec = info[0], info[1]

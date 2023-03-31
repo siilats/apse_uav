@@ -96,9 +96,9 @@ if setup.use_coppelia_sim:
     # sim.handleVisionSensor(visionSensorHandle)
 
     # Run a simulation in stepping mode:
-    client.setStepping(True)
-    sim.startSimulation()
-    client.step()
+    #client.setStepping(True)
+    #sim.startSimulation()
+    #client.step()
     sim.addLog(sim.verbosity_scriptinfos, "all set up ---------------------------")
 
 camera_location = None
@@ -124,6 +124,18 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     if config.use_boards:
         base_corners, base_ids, corners, ids, base_board = detect_charuco_board(config, gray, aruco_dict, parameters)
+        aruco.drawDetectedCornersCharuco(frame, base_corners, base_ids)
+        obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+        flag, rvec_base, tvec_base = cv2.solvePnP(obj_points, img_points, mtx, None)
+        flag, rvecs_base, tvecs_base, r2 = cv2.solvePnPGeneric(
+            obj_points, img_points, mtx, None,
+            flags=cv2.SOLVEPNP_IPPE)
+        if flag:
+            cv2.drawFrameAxes(frame, mtx, None, rvec_base, tvec_base, .2)
+            cv2.drawFrameAxes(frame, mtx, None, rvecs_base[0], tvecs_base[0], .2)
+            cv2.drawFrameAxes(frame, mtx, None, rvecs_base[1], tvecs_base[1], .2)
+            generic_ang1 = convert_angles(rvecs_base[0].ravel())
+            generic_ang2 = convert_angles(rvecs_base[1].ravel())
     else:
         corners, ids = detectArucoMarkers(gray, parameters)
 
@@ -160,10 +172,11 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
 
             base_rvec, base_tvec = pick_rvec2(base_rvecs, base_tvecs)
-            ttc = np.array([-config.square_len*1.5, -config.square_len*1.5, 0])
+
+            ttc = np.array([-config.square_len*1.5, -config.square_len*1.5,  -10*config.square_len*1.5])
             rrc = np.array([0.0, 0.0, 0.0])
             base_rvec_center, base_tvec_center = relative_position(base_rvec, base_tvec, rrc, ttc)
-            cv2.drawFrameAxes(frame, mtx, dist, base_rvec_center, base_tvec_center, 0.5,thickness=5)
+            cv2.drawFrameAxes(frame, mtx, dist, base_rvec_center, base_tvec_center, 1, thickness=5)
             # cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1,thickness=5)
 
             if setup.use_coppelia_sim:
@@ -220,17 +233,26 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             rrc = np.array([0.0, 0.0, 0.0])
             gripper_rvec_center, gripper_tvec_center = relative_position(gripper_rvec, gripper_tvec, rrc, ttc)
 
+            gripper_rvec_rot=gripper_rvec.copy()
+            gripper_rvec_rot[2] = gripper_rvec_rot[2] - np.pi/2
+            gripper_rvec_center[2] = gripper_rvec_center[2] - np.pi/2
             cv2.drawFrameAxes(frame, mtx, dist, gripper_rvec_center, gripper_tvec_center, 1)
+            cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1)
+            cv2.drawFrameAxes(frame, mtx, dist, gripper_rvec_rot, gripper_tvec, 1)
+
+
 
             if setup.use_coppelia_sim and base_rvec is not None:
                 # move the yoke marker
                 # tvectmp_cp = tvec[0] - camera_location
-                gripper_rvec_b, gripper_tvec_b = relative_position(gripper_rvec_center, gripper_tvec_center, base_rvec_center,
-                                                             base_tvec_center, )
+                gripper_rvec_b, gripper_tvec_b = \
+                    relative_position(base_rvec_center, base_tvec_center,
+                                      gripper_rvec_center, gripper_tvec_center )
 
                 gripper_rvec_inv, gripper_rvec_inv = invert_vec(gripper_rvec, gripper_tvec)
 
                 gripper_board_w = sim.getObjectPosition(gripperBoard, -1)
+                base_board_w = sim.getObjectPosition(baseBoard, -1)
                 z1_robot_w = sim.getObjectPosition(z1_robot, -1)
                 gripper_board_rb = sim.getObjectPosition(gripperBoard, z1_robot)
                 gripper_board_position = [gripper_tvec_b[0][0], gripper_tvec_b[2][0],
