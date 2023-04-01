@@ -63,9 +63,9 @@ if setup.use_coppelia_sim:
         sim = func_timeout(3, lambda: client.getObject('sim'))
     except:
         raise IOError("Failed to connect to Coppeliasim, either open it or set setup.use_coppelia_sim to false")
-    sim.stopSimulation()
-    while sim.getSimulationState() != sim.simulation_stopped:
-        time.sleep(0.1)
+    # sim.stopSimulation()
+    # while sim.getSimulationState() != sim.simulation_stopped:
+    #     time.sleep(0.1)
     # sim.loadScene(os.getcwd() + config.coppelia_path)
     visionSensor = sim.getObject('/Vision_sensor')
 
@@ -73,12 +73,19 @@ if setup.use_coppelia_sim:
     baseBoardCorner = sim.getObject('/base_board_corner')
 
     yokeBoard = sim.getObject('/yoke_board')
+    yokeBoardCorner = sim.getObject('/yoke_board_corner')
+
     gripperBoard = sim.getObject('/gripper_board')
+    gripperBoardCorner = sim.getObject('/gripper_board_corner')
     tip = sim.getObject('/tip')
     yoke_joint0 = sim.getObject('/yoke_joint0')
     yoke_joint1 = sim.getObject('/yoke_joint1')
     z1_robot = sim.getObject('/z1_robot')
-
+    yoke_handle = sim.getObject('/yoke_handle_target')
+    target_handle = sim.getObject('/target')
+    tip_world = sim.getObject('/tip_world')
+    yoke_world = sim.getObject('/yoke_world')
+    base_world = sim.getObject('/base_world')
     #read 6 joints of the robot
     joints = []
     for i in range(6):
@@ -160,16 +167,11 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
             obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
             base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
-
-            ttc = np.array([0.0, -config.square_len*1.5, 0.0])
-            rrc = np.array([0.0, 0.0, 0.0])
-            base_rvec_center, base_tvec_center = relative_position(base_rvec, base_tvec, rrc, ttc)
-            cv2.drawFrameAxes(frame, mtx, dist, base_rvec_center, base_tvec_center, 1, thickness=5)
+            cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1, thickness=5)
             # cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1,thickness=5)
 
             if setup.use_coppelia_sim:
                 base_rvec_inv, base_tvec_inv = invert_vec(base_rvec, base_tvec)
-                base_rvec_inv_c, base_tvec_inv_c = invert_vec(base_rvec_center, base_tvec_center)
 
                 camera_w = sim.getObjectPosition(visionSensor, -1)
                 base_board_corner_w = sim.getObjectPosition(baseBoardCorner, -1)
@@ -178,8 +180,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 if base_car_detected == 0:
                     r1 = R.from_rotvec(base_rvec.ravel())
                     baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                    camera_location_coppelia = [-base_tvec_inv[0][0], base_tvec_inv[1][0]
-                                                , -base_tvec_inv[2][0]  ]
+                    camera_location_coppelia = [base_tvec_inv[0][0], base_tvec_inv[1][0]
+                                                , base_tvec_inv[2][0]  ]
                     sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
 
             yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
@@ -187,98 +189,83 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
                 yoke_obj_points, yoke_img_points, mtx, dist,
                 flags=cv2.SOLVEPNP_IPPE)
-            yoke_rvec, yoke_tvec = pick_rvec2(yoke_rvecs, yoke_tvecs)
-            ttc = np.array([-config.marker_length *(4+3)/2, -config.square_len * 0.5, 0])
-            rrc = np.array([0.0, 0.0, 0.0])
-            yoke_rvec_center, yoke_tvec_center = relative_position(yoke_rvec, yoke_tvec, rrc, ttc)
+            yoke_rvec, yoke_tvec = pick_rvec_board(yoke_rvecs, yoke_tvecs)
 
-            cv2.drawFrameAxes(frame, mtx, dist, yoke_rvec_center, yoke_tvec_center, 1)
+            cv2.drawFrameAxes(frame, mtx, dist, yoke_rvec, yoke_tvec, 1)
 
             if setup.use_coppelia_sim and base_rvec is not None:
                 # move the yoke marker
                 #tvectmp_cp = tvec[0] - camera_location
-                yoke_rvec_b, yoke_tvec_b = relative_position( yoke_rvec_center, yoke_tvec_center, base_rvec_center, base_tvec_center,)
+                yoke_rvec_b, yoke_tvec_b = relative_position(  base_rvec, base_tvec,yoke_rvec, yoke_tvec)
 
-                yoke_rvec_inv, yoke_tvec_inv = invert_vec(yoke_rvec, yoke_tvec)
+                yoke_board_bb_o = sim.getObjectOrientation(yokeBoardCorner, baseBoardCorner)
+                yoke_joint_w = sim.getJointPosition(yoke_joint1)
+                sim.setJointPosition(yoke_joint1,yoke_rvec_b[2][0] )
+                yoke_board_c = sim.getObjectPosition(yokeBoardCorner, visionSensor)
+                yoke_board_w = sim.getObjectPosition(yokeBoardCorner, -1)
+                yoke_board_bb = sim.getObjectPosition(yokeBoardCorner, baseBoardCorner)
 
-                yoke_board_w = sim.getObjectPosition(yokeBoard, -1)
-                yoke_board_bb = sim.getObjectPosition(yokeBoard, baseBoard)
-                yoke_board_position = [yoke_tvec_b[0][0], -yoke_tvec_b[2][0],
-                                                      coppelia_config.floor_height - yoke_tvec_b[1][0]  ]
-                sim.setObjectPosition(yokeBoard, -1, yoke_board_position)
+                yoke_board_position = [-yoke_tvec[0][0], -yoke_tvec[1][0],
+                                                      yoke_tvec[2][0]  ]
+                sim.setObjectPosition(yokeBoardCorner, visionSensor, yoke_board_position)
 
-                r4 = R.from_rotvec(yoke_rvec_b.ravel())
-                yoke_angle = r4.as_euler('zxy', degrees=True)[2]
-                sim.setJointPosition(yoke_joint1, yoke_angle / 360 * 2 * np.pi)
+
 
             gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = create_grid_board(config, aruco_dict,
                                                             gray, corners, ids,mtx, dist, config.gripper, config.gripper+1)
             gripper_flag, gripper_rvecs, gripper_tvecs, ggripper_r2 = cv2.solvePnPGeneric(
                 gripper_obj_points, gripper_img_points, mtx, dist,
                 flags=cv2.SOLVEPNP_IPPE)
-            gripper_rvec, gripper_tvec = pick_rvec2(gripper_rvecs, gripper_tvecs)
-            ttc = np.array([config.square_len * 0.5,-config.marker_length * (2 + 1) / 2, 0 ])
-            rrc = np.array([0.0, 0.0, 0.0])
-            gripper_rvec_center, gripper_tvec_center = relative_position(gripper_rvec, gripper_tvec, rrc, ttc)
-
-            gripper_rvec_rot=gripper_rvec.copy()
-            gripper_rvec_rot[2] = gripper_rvec_rot[2] - np.pi/2
-            gripper_rvec_center[2] = gripper_rvec_center[2] - np.pi/2
-            cv2.drawFrameAxes(frame, mtx, dist, gripper_rvec_center, gripper_tvec_center, 1)
-            cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1)
-            cv2.drawFrameAxes(frame, mtx, dist, gripper_rvec_rot, gripper_tvec, 1)
-
-
+            gripper_rvec, gripper_tvec = pick_rvec_board(gripper_rvecs, gripper_tvecs)
+            cv2.drawFrameAxes(frame, mtx, dist, gripper_rvec, gripper_tvec, 1)
 
             if setup.use_coppelia_sim and base_rvec is not None:
                 # move the yoke marker
                 # tvectmp_cp = tvec[0] - camera_location
                 gripper_rvec_b, gripper_tvec_b = \
-                    relative_position(base_rvec_center, base_tvec_center,
-                                      gripper_rvec_center, gripper_tvec_center )
+                    relative_position(base_rvec, base_tvec,
+                                      gripper_rvec, gripper_tvec )
 
                 gripper_rvec_inv, gripper_rvec_inv = invert_vec(gripper_rvec, gripper_tvec)
 
-                gripper_board_w = sim.getObjectPosition(gripperBoard, -1)
-                base_board_w = sim.getObjectPosition(baseBoard, -1)
-                z1_robot_w = sim.getObjectPosition(z1_robot, -1)
-                gripper_board_rb = sim.getObjectPosition(gripperBoard, z1_robot)
-                gripper_board_position = [gripper_tvec_b[0][0], gripper_tvec_b[2][0],
-                                       coppelia_config.floor_height - gripper_tvec_b[1][0]]
-                gripper_position = [gripper_tvec_b[0][0], gripper_tvec_b[2][0],
-                                       coppelia_config.floor_height - gripper_tvec_b[1][0]]
-                z1_robot_position = np.array(gripper_position) - np.array(gripper_board_rb)
-                sim.setObjectPosition(z1_robot, -1, list(z1_robot_position))
+                gripper_board_c = sim.getObjectPosition(gripperBoardCorner, visionSensor)
+                gripper_position = [-gripper_tvec[0][0], -gripper_tvec[1][0],
+                                       gripper_tvec[2][0]]
+                sim.setObjectPosition(gripperBoardCorner, visionSensor, gripper_position)
 
+                yoke_handle_w = sim.getObjectPosition(yoke_handle, -1)
+                camera_w = sim.getObjectPosition(visionSensor, -1)
+
+                tip_rb = sim.getObjectPosition(tip_world, base_world)
+                yoke_rb = sim.getObjectPosition(yoke_world, base_world)
+                yoke_rb_ori = sim.getObjectOrientation(yoke_world, base_world)
+                yoke_rb_pose = sim.getObjectPose(yoke_world, base_world)
+                yoke_world_90 = sim.getObject('/yoke_world_90')
+                yoke_rb_pose_90 = sim.getObjectPose(yoke_world_90, base_world)
+
+
+                sim.setObjectPose(target_handle, base_world, yoke_rb_pose_90)
+
+                # ik_target = '/IK'
+                # robotBaseHandle = sim.getObject(ik_target)
+                # scriptHandle = sim.getScript(sim.scripttype_customizationscript, robotBaseHandle)
+                # sim.callScriptFunction('handleIK', scriptHandle)
+
+
+
+                sim.handleVisionSensor(visionSensor)
                 img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
                 img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
                 img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+                corners_new, ids_new = detectArucoMarkers(img, parameters)
+                cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
                 img_name = "image_{}.png".format(k)
-                corners_t, ids_t = detectArucoMarkers(img, parameters)
                 cv2.imwrite("test_video/" + img_name, img)
+                for i in range(6):
+                     print(sim.getJointPosition(joints[i]))
 
 
-            ids[0][0] = config.moving_car
-            ids[1][0] = config.base_car
-            ids[2][0] = config.gripper
 
-            moving_car_detected = 1
-            base_car_detected = 1
-            gripper_detected = 1
-
-
-            cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_corners.squeeze(), rvec[0],
-                                                             None if k == config.frames.start else cx1_prev,
-                                                             None if k == config.frames.start else cy1_prev, markerLength)  # get detected marker parameters
-
-            cx4, cy4, msp4, diff4, ang4 = getMarkerData(yoke_board_corners[0].squeeze(), rvec[1],
-                                                             None if k == config.frames.start else cx4_prev,
-                                                             None if k == config.frames.start else cy4_prev, markerLength)  # get detected marker parameters
-
-            cx5, cy5, msp5, diff5, ang5 = getMarkerData(gripper_board_corners[0].squeeze(), rvec[2],
-                                                        None if k == config.frames.start else cx5_prev,
-                                                        None if k == config.frames.start else cy5_prev,
-                                                        markerLength)  # get detected marker parameters
 
         else:
             # find the index of the moving car from ids using argwhere
