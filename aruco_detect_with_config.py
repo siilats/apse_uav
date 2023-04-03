@@ -267,21 +267,26 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                     udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
                     ctrlComp.udp = udp
                     armModel = arm._ctrlComp.armModel
+                    joint_positions = []
+
+                    # Passive Mode and Calibration
+                    armState = unitree_arm_interface.ArmFSMState
+                    arm.loopOn()
+                    arm.setWait(True)
+                    arm.setFsm(armState.PASSIVE)
+                    arm.calibration()
+                    arm.loopOff()
                     arm.setFsmLowcmd()
 
-                    armState = unitree_arm_interface.ArmFSMState
-                    lastPos = arm.lowstate.getQ()
-                    joint_positions = []
                     for i in range(6):
                         joint_positions.append(sim.getJointPosition(joints[i]))
 
                     # gripper
-                    joint_positions.append(0)
+                    # joint_positions.append(0)
                     duration = 1000
                     lastPos = arm.lowstate.getQ()
                     targetPos = np.array(joint_positions)  # forward
 
-                    arm.startTrack(armState.JOINTCTRL)
                     for i in range(0, duration):
                         arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
                         arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
