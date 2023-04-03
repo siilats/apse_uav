@@ -1,17 +1,16 @@
-import cv2
-from cv2 import aruco
-import numpy as np
-import json
-import csv
+import argparse
 import os
+import platform
 
+from cv2 import aruco
 from func_timeout import func_timeout
 from scipy.spatial.transform import Rotation as R
+import unitree_arm_interface
+
 import time
-from zmqRemoteApi import RemoteAPIClient
-import argparse
 
 from unitree import *
+from zmqRemoteApi import RemoteAPIClient
 
 parser = argparse.ArgumentParser(description='Name of the config file')
 parser.add_argument('--config', type=str,
@@ -178,7 +177,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 camera_bb = sim.getObjectPosition(visionSensor, baseBoardCorner)
                 # First time detecting the base board move the camera and leave base board at 0,0,0
                 if base_car_detected == 0:
-
                     camera_location_coppelia = [base_tvec_inv[0][0], base_tvec_inv[1][0]
                                                 , base_tvec_inv[2][0]  ]
                     sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
@@ -260,80 +258,46 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
                 img_name = "image_{}.png".format(k)
                 cv2.imwrite("test_video/" + img_name, img)
-                for i in range(6):
-                     print(sim.getJointPosition(joints[i]))
 
+                if platform.system() == "Linux":
+                    # setup robot
+                    np.set_printoptions(precision=3, suppress=True)
+                    arm = unitree_arm_interface.ArmInterface(hasGripper=True)
+                    ctrlComp = arm._ctrlComp
+                    udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
+                    ctrlComp.udp = udp
+                    armModel = arm._ctrlComp.armModel
+                    joint_positions = []
 
+                    # Passive Mode and Calibration
+                    armState = unitree_arm_interface.ArmFSMState
+                    arm.loopOn()
+                    arm.setWait(True)
+                    arm.setFsm(armState.PASSIVE)
+                    arm.calibration()
+                    arm.loopOff()
+                    arm.setFsmLowcmd()
 
+                    for i in range(6):
+                        joint_positions.append(sim.getJointPosition(joints[i]))
 
-        else:
-            # find the index of the moving car from ids using argwhere
-            base_car_idx = (ids.ravel() == config.base_car)
-            moving_car_idx = (ids.ravel() == config.moving_car)
+                    # gripper
+                    # joint_positions.append(0)
+                    duration = 1000
+                    lastPos = arm.lowstate.getQ()
+                    targetPos = np.array(joint_positions)  # forward
 
-            if np.any(base_car_idx):
-                base_car_index = np.argwhere(base_car_idx).ravel()[0]
-                base_car_corners = corners[base_car_index][0]
-                if setup.use_coppelia_sim:
-                    camera_orientation = rvec[base_car_index]
-                    camera_location = tvec[base_car_index]
-
-                    # First time detecting the base board move the camera and leave base board at 0,0,0
-                    if base_car_detected == 0:
-                        r1 = R.from_rotvec(camera_orientation)
-                        baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                        camera_location_coppelia = [-camera_location[0], 0, camera_location[2]]
-                        sim.setObjectPosition(visionSensor, -1, camera_location_coppelia)
-                base_car_detected = 1
-                cx1, cy1, msp1, diff1, ang1 = getMarkerData(base_car_corners, rvec[base_car_index],
-                                                           None if k == config.frames.start else cx1_prev,
-                                                           None if k == config.frames.start else cy1_prev,
-                                                           config.marker_length)  # get detected marker parameters
-                draw_everything(draw_settings, base_car_corners, frame, mtx, dist, rvec[base_car_index],
-                                tvec[base_car_index], markerLength, config.base_car)
-                cx1_prev, cy1_prev = cx1, cy1  # save position of the marker in the image
-            if np.any(moving_car_idx):
-                moving_car_index = np.argwhere(moving_car_idx).ravel()[0]
-                moving_car_corners = corners[moving_car_index][0]
-                moving_car_detected = 1
-                if setup.use_coppelia_sim and camera_location is not None:
-                    # move the yoke marker
-                    tvectmp_cp = tvec[moving_car_index] - camera_location
-                    tvectmp_cp[2] = coppelia_config.floor_level
-
-                    sim.setObjectPosition(yokeBoard, -1, [tvectmp_cp[0], -tvectmp_cp[1], tvectmp_cp[2]])
-
-                    r4 = R.from_rotvec(rvec[moving_car_index])
-                    yoke_angle = r4.as_euler('zxy', degrees=True)[0]
-                    r1 = R.from_rotvec(camera_orientation)
-                    baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
-                    correction = -90 - baseBoard_orientation  # -7
-                    final_angle = 180 - yoke_angle + correction
-
-                    # we have -90 and then angle4 is 120 and we want answe 45
-                    sim.setObjectOrientation(yokeBoard, -1,
-                                                  [180 / 360 * 2 * 3.1415, 0, final_angle / 360 * 2 * 3.1415])
-
-                    img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
-                    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
-                    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
-                    img_name = "image_{}.png".format(k)
-                    corners_t, ids_t = detectArucoMarkers(img, parameters)
-                    cv2.imwrite("test_video/" + img_name, img)
-                
-                cx4, cy4, msp4, diff4, ang4 = getMarkerData(moving_car_corners, rvec[moving_car_index],
-                                                           None if k == config.frames.start else cx1_prev,
-                                                           None if k == config.frames.start else cy1_prev,
-                                                           config.marker_length)  # get detected marker parameters
-                draw_everything(draw_settings, moving_car_corners, frame, mtx, dist, rvec[moving_car_index],
-                                tvec[moving_car_index], markerLength, config.moving_car)
-                cx4_prev, cy4_prev = cx4, cy4 #save position of the marker in the image
-
-        if moving_car_detected and base_car_detected:
-            dist_veh1_aruco = calculateDistance(np.float32([[cx4, cy4]]), np.float32([[cx1, cy1]]), markerLength, msp1, msp4)  # calculate distances in metres for Aruco method
-            if draw_settings.lines:
-                drawLinesOnImage(np.float32([[cx4, cy4]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1, ang4)
-                # drawLinesOnImage(np.float32([[cx5, cy5]]), cx1, cy1, dist_veh1_aruco, frame, draw_settings, ang1,ang5)
+                    for i in range(0, duration):
+                        arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
+                        arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
+                        arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))  # set torque
+                        arm.gripperQ = -1 * (i / duration)
+                        arm.sendRecv()  # udp connection
+                        # print(arm.lowstate.getQ())
+                        time.sleep(arm._ctrlComp.dt)
+                    arm.loopOn()
+                    arm.backToStart()
+                    arm.loopOff()
 
         if setup.use_coppelia_sim:
             client.step()
