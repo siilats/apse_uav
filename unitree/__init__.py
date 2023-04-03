@@ -64,7 +64,6 @@ class CapturingConfig:
     marker_length: float
     use_boards: bool
     square_len: float
-    marker_separation: float
     gamma: float
     grid_start: int
     grid_end: int
@@ -403,7 +402,7 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
 def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_id, end_id):
     yoke_board_size = (end_id - start_id + 1, 1)
     yoke_board = aruco.GridBoard(yoke_board_size, markerLength=config.marker_length,
-                                 markerSeparation=config.marker_separation, dictionary=aruco_dict,
+                                 markerSeparation=config.square_len - config.marker_length, dictionary=aruco_dict,
                                  ids=np.arange(start_id, end_id+1))
     yoke_detector = aruco.ArucoDetector(dictionary=aruco_dict,
                                         refineParams=aruco.RefineParameters())
