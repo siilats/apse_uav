@@ -11,7 +11,6 @@ capturing:
   marker_length: 0.05
   use_boards: true
   square_len: 0.064
-  marker_separation: 0.05
   gamma: 2
   grid_start: 10
   grid_end: 13
