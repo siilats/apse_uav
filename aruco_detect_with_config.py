@@ -34,8 +34,6 @@ mtx, dist = readCameraParams(config) #read camera parameters
 
 [cx1_prev, cy1_prev, cx2_prev, cy2_prev, cx3_prev, cy3_prev, cx4_prev, cy4_prev, cx5_prev, cy5_prev] = np.zeros(10, dtype='int') #initialization of ArUco marker centres
 
-
-
 if config.use_images:
     k = config.frames.start
     config.frames.end = len(os.listdir(config.path_input_images)) if config.frames.end is None else config.frames.end
@@ -179,8 +177,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 camera_bb = sim.getObjectPosition(visionSensor, baseBoardCorner)
                 # First time detecting the base board move the camera and leave base board at 0,0,0
                 if base_car_detected == 0:
-                    r1 = R.from_rotvec(base_rvec.ravel())
-                    baseBoard_orientation = r1.as_euler('zxy', degrees=True)[0]
                     camera_location_coppelia = [base_tvec_inv[0][0], base_tvec_inv[1][0]
                                                 , base_tvec_inv[2][0]  ]
                     sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
@@ -244,7 +240,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 yoke_world_90 = sim.getObject('/yoke_world_90')
                 yoke_rb_pose_90 = sim.getObjectPose(yoke_world_90, base_world)
 
-
+                #make sure all coordinates are in robot base so i can send them to the real robot
                 sim.setObjectPose(target_handle, base_world, yoke_rb_pose_90)
 
                 # ik_target = '/IK'
@@ -254,7 +250,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
 
 
-                # sim.handleVisionSensor(visionSensor)
+                #sim.handleVisionSensor(visionSensor)
                 img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
                 img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
                 img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
