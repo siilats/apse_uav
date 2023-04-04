@@ -4,7 +4,8 @@ import os
 import platform
 import time
 
-import unitree_arm_interface
+if platform.system() == "Linux":
+    import unitree_arm_interface
 from cv2 import aruco
 from func_timeout import func_timeout
 
@@ -115,23 +116,13 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     base_board_corner_w = sim.getObjectPosition(baseBoardCorner, -1)
     camera_bb = sim.getObjectPosition(visionSensor, baseBoardCorner)
     camera_bb_pose = sim.getObjectPose(visionSensor, baseBoardCorner)
-    # First time detecting the base board move the camera and leave base board at 0,0,0
-
-    R2, _ = cv2.Rodrigues(base_rvec_inv)
-    R2 = np.transpose(R2)
-
-    q = R.from_matrix(R2).as_quat()
-    orientation = [q[3], q[0], q[1], q[2]]
+    camera_bb_orient = sim.getObjectOrientation(visionSensor, baseBoardCorner)
+    cam_orient_coppelia = [base_rvec_inv[0][0] , base_rvec_inv[1][0], np.pi + base_rvec_inv[2][0]]
 
     camera_location_coppelia = [base_tvec_inv[0][0], base_tvec_inv[1][0], base_tvec_inv[2][0]]
     sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
-    r = R.from_rotvec(base_rvec_inv.ravel())
-    cam_orient_coppelia = r.as_euler('zxy')
-    cam_orient_coppelia = [cam_orient_coppelia[0] + np.pi / 2, cam_orient_coppelia[1], cam_orient_coppelia[2] - np.pi]
-
     sim.setObjectOrientation(visionSensor, baseBoardCorner, cam_orient_coppelia)
-    sim.setObjectOrientation(visionSensor, baseBoardCorner, camera_bb_orient)
-    print(cam_orient_coppelia)
+
 
     yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
         create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
