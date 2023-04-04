@@ -88,6 +88,7 @@ class SetupConfig:
     show_image: bool
     draw_settings: DrawSettingsConfig
     use_coppelia_sim: bool
+    reset_sim: bool
 
 @dataclass
 class ModelConfig:
@@ -495,6 +496,17 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectOrientation(visionSensor, -1, forward_orientation)
     sim.setObjectPosition(visionSensor, -1, forward_position)
 
+    # read 6 joints of the robot
+    joints = []
+    for i in range(6):
+        joints.append(sim.getObject('/joint%d' % (i + 1)))
+        if i + 1 == 2:
+            sim.setJointPosition(joints[i], 90 / 180 * np.pi)
+        elif i + 1 == 3:
+            sim.setJointPosition(joints[i], -90 / 180 * np.pi)
+        else:
+            sim.setJointPosition(joints[i], 0)
+
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
     obj_points2 = np.array([[-markerLength / 2, markerLength / 2, 0],
@@ -532,3 +544,41 @@ def relative_position(rvec1, tvec1, rvec2, tvec2):
     composedRvec = composedRvec.reshape((3, 1))
     composedTvec = composedTvec.reshape((3, 1))
     return composedRvec, composedTvec
+
+
+def standard_coppelia_objects(sim):
+    visionSensor = sim.getObject('/Vision_sensor')
+    baseBoard = sim.getObject('/base_board')
+    baseBoardCorner = sim.getObject('/base_board_corner')
+    yokeBoard = sim.getObject('/yoke_board')
+    yokeBoardCorner = sim.getObject('/yoke_board_corner')
+    gripperBoard = sim.getObject('/gripper_board')
+    gripperBoardCorner = sim.getObject('/gripper_board_corner')
+    tip = sim.getObject('/tip')
+    yoke_joint0 = sim.getObject('/yoke_joint0')
+    yoke_joint1 = sim.getObject('/yoke_joint1')
+    z1_robot = sim.getObject('/z1_robot')
+    yoke_handle = sim.getObject('/yoke_handle_target')
+    target_handle = sim.getObject('/target')
+    tip_world = sim.getObject('/tip_world')
+    yoke_world = sim.getObject('/yoke_world')
+    base_world = sim.getObject('/base_world')
+
+    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    sim.setInt32Param(sim.intparam_idle_fps, 0)
+
+    joints = []
+    for i in range(6):
+        joints.append(sim.getObject('/joint%d' % (i + 1)))
+
+    return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
+        gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
+        yoke_world, base_world, joints
+
+def sort_corners(corners, ids):
+    idx = np.argsort(ids.ravel())
+    corner_not_tuple = np.array(corners)[idx]
+    corners = tuple(corner_not_tuple)
+    ids = ids[idx]
+
+    return corners, ids

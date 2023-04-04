@@ -54,6 +54,7 @@ capturing:
     gripper_board_yaw: 0
 setup:
   use_coppelia_sim: true
+  reset_sim: false
   show_image: true
   draw_settings:
     markers: true
