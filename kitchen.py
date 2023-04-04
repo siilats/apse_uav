@@ -68,7 +68,7 @@ if setup.reset_sim:
 
 visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
     gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, \
-    tip_world, yoke_world, base_world, joints = standard_coppelia_objects(sim)
+    tip_world, yoke_world, base_world, joints, z1_robot = standard_coppelia_objects(sim)
 
 if setup.reset_sim:
     initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip, yoke_joint0, yoke_joint1)
@@ -136,6 +136,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # move the yoke marker
     # tvectmp_cp = tvec[0] - camera_location
     yoke_rvec_b, yoke_tvec_b = relative_position(base_rvec, base_tvec, yoke_rvec, yoke_tvec)
+    yoke_rvec_b2, yoke_tvec_b2 = relative_position( yoke_rvec, yoke_tvec,base_rvec, base_tvec)
 
     yoke_board_bb_o = sim.getObjectOrientation(yokeBoardCorner, baseBoardCorner)
     yoke_joint_w = sim.getJointPosition(yoke_joint1)
@@ -144,10 +145,14 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     yoke_board_w = sim.getObjectPosition(yokeBoardCorner, -1)
     yoke_board_bb = sim.getObjectPosition(yokeBoardCorner, baseBoardCorner)
 
-    yoke_board_position = [-yoke_tvec[0][0], -yoke_tvec[1][0],
-                           yoke_tvec[2][0]]
-    sim.setObjectPosition(yokeBoardCorner, visionSensor, yoke_board_position)
+    yoke_board_position = [-yoke_tvec_b[0][0], -yoke_tvec_b[1][0],
+                           -yoke_tvec_b[2][0]]
 
+    sim.setObjectPosition(yokeBoardCorner, baseBoardCorner, yoke_board_position)
+
+    sim.setJointPosition(joints[1], 0)
+    sim.setJointPosition(joints[2], 0)
+    sim.setObjectPosition(z1_robot, gripperBoardCorner, [0, 0, 0])
     gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = \
         create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.gripper, config.gripper + 1)
 

@@ -131,29 +131,29 @@ def setArucoParameters():
     parameters = aruco.DetectorParameters()
 
     #set values for Aruco detection parameters
-    parameters.minMarkerPerimeterRate = 0.01 #enables detection from higher altitude
+    parameters.minMarkerPerimeterRate = 0.05 #enables detection from higher altitude
     parameters.perspectiveRemovePixelPerCell = 8
-    parameters.perspectiveRemoveIgnoredMarginPerCell = 0.33
-    parameters.errorCorrectionRate = 2.0 #much more detections from high altitude, but FP happen sometimes
-    parameters.aprilTagMinClusterPixels = 100 #less candidates to encode ID
-    parameters.aprilTagMaxNmaxima = 5
-    parameters.aprilTagCriticalRad = 20*np.pi/180 #much less candidates to encode ID
-    parameters.aprilTagMaxLineFitMse = 1
-    parameters.aprilTagMinWhiteBlackDiff = 100 #faster detection, but in bad contrast problems may happen
+    parameters.perspectiveRemoveIgnoredMarginPerCell = 0.13
+    parameters.errorCorrectionRate = 0.9 #much more detections from high altitude, but FP happen sometimes
+    parameters.aprilTagMinClusterPixels = 50 #less candidates to encode ID
+    parameters.aprilTagMaxNmaxima = 20
+    parameters.aprilTagCriticalRad = -1#much less candidates to encode ID
+    parameters.aprilTagMaxLineFitMse = 10
+    parameters.aprilTagMinWhiteBlackDiff = 20 #faster detection, but in bad contrast problems may happen
     #parameters.aprilTagQuadDecimate = 1.5 #huge detection time speedup, but at the cost of fewer detections and worse accuracy
 
     #default set of all Aruco detection parameters
-    #parameters.adaptiveThreshWinSizeMin = 3
-    #parameters.adaptiveThreshWinSizeMax = 23
-    #parameters.adaptiveThreshWinSizeStep = 10
-    #parameters.adaptiveThreshConstant = 7
+    parameters.adaptiveThreshWinSizeMin = 10
+    parameters.adaptiveThreshWinSizeMax = 200
+    parameters.adaptiveThreshWinSizeStep = 10
+    parameters.adaptiveThreshConstant = -30
     #parameters.minMarkerPerimeterRate = 0.03
     #parameters.maxMarkerPerimeterRate = 4
     #parameters.polygonalApproxAccuracyRate = 0.03
     #parameters.minCornerDistanceRate = 0.05
     #parameters.minDistanceToBorder = 3
     #parameters.minMarkerDistanceRate = 0.05
-    #parameters.cornerRefinementMethod = aruco.CORNER_REFINE_NONE
+    parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
     #parameters.cornerRefinementWinSize = 5
     #parameters.cornerRefinementMaxIterations = 30
     #parameters.cornerRefinementMinAccuracy = 0.1
@@ -339,7 +339,7 @@ def pick_rvec(rvecs, tvecs):
 def pick_rvec_board(rvecs, tvecs):
     generic_ang1 = convert_angles(rvecs[0].ravel())
     generic_ang2 = convert_angles(rvecs[1].ravel())
-    if abs(generic_ang1[2] - 180) > abs(generic_ang2[2] - 180):
+    if generic_ang1[1] < generic_ang2[1]:
         rvectmp = rvecs[0]
         tvectmp = tvecs[0]
     else:
@@ -483,7 +483,7 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectOrientation(yokeBoard, yoke_bg, [cc.yoke_board_roll / x, cc.yoke_board_pitch, cc.yoke_board_yaw / x])
 
     sim.setJointPosition(yoke_joint0, 0)
-    sim.setJointPosition(yoke_joint1, 15 / x)
+    sim.setJointPosition(yoke_joint1, 0)
 
     sim.setObjectPosition(gripperBoard, tip, [cc.gripper_board_x, cc.gripper_board_y, cc.gripper_board_z])
     sim.setObjectOrientation(gripperBoard, tip, [cc.gripper_board_pitch / x, cc.gripper_board_roll / x, cc.gripper_board_yaw / x])
@@ -573,7 +573,7 @@ def standard_coppelia_objects(sim):
 
     return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
         gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
-        yoke_world, base_world, joints
+        yoke_world, base_world, joints, z1_robot
 
 def sort_corners(corners, ids):
     idx = np.argsort(ids.ravel())
