@@ -149,6 +149,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                            yoke_tvec_b[2][0]]
 
     sim.setObjectPosition(yokeBoardCorner, baseBoardCorner, yoke_board_position)
+    sim.setObjectOrientation(yokeBoardCorner, baseBoardCorner, list(yoke_rvec_b.ravel()))
 
     sim.setJointPosition(joints[1], 0)
     sim.setJointPosition(joints[2], 0)
@@ -184,7 +185,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     yoke_rb_pose_90 = sim.getObjectPose(yoke_world_90, base_world)
 
     # make sure all coordinates are in robot base so i can send them to the real robot
-    sim.setObjectPose(target_handle, base_world, yoke_rb_pose_90)
+    # sim.setObjectPose(target_handle, base_world, yoke_rb_pose_90)
 
     # ik_target = '/IK'
     # robotBaseHandle = sim.getObject(ik_target)
