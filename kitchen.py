@@ -36,7 +36,7 @@ mtx, dist = readCameraParams(config)  # read camera parameters
 if config.use_images:
     k = config.frames.start
     config.frames.end = len(os.listdir(config.path_input_images)) if config.frames.end is None else config.frames.end
-    frame = cv2.imread(config.path_input_images + "/image_%04d.png" % config.frames.start)
+    frame = cv2.imread(config.path_input_images + "/image_%04d.jpg" % config.frames.start)
 elif config.use_video:
     video = cv2.VideoCapture(config.path_input_video)
     k = config.frames.start
@@ -68,7 +68,7 @@ if setup.reset_sim:
 
 visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
     gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, \
-    tip_world, yoke_world, base_world, joints, z1_robot = standard_coppelia_objects(sim)
+    tip_world, yoke_world, base_world, joints, z1_robot, robot_parent = standard_coppelia_objects(sim)
 
 if setup.reset_sim:
     initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip, yoke_joint0, yoke_joint1)
@@ -86,7 +86,7 @@ if setup.reset_sim:
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     # read frame from image or video
     if config.use_images:
-        frame = cv2.imread(config.path_input_images + "/image_%04d.png" % k)
+        frame = cv2.imread(config.path_input_images + "/image_%04d.jpg" % k)
     elif config.use_video:
         ret, frame = video.read()
         if ret == False:
@@ -146,13 +146,13 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     yoke_board_bb = sim.getObjectPosition(yokeBoardCorner, baseBoardCorner)
 
     yoke_board_position = [-yoke_tvec_b[0][0], -yoke_tvec_b[1][0],
-                           -yoke_tvec_b[2][0]]
+                           yoke_tvec_b[2][0]]
 
     sim.setObjectPosition(yokeBoardCorner, baseBoardCorner, yoke_board_position)
 
     sim.setJointPosition(joints[1], 0)
     sim.setJointPosition(joints[2], 0)
-    sim.setObjectPosition(z1_robot, gripperBoardCorner, [0, 0, 0])
+    # sim.setObjectPosition(z1_robot, gripperBoardCorner, [0, 0, 0])
     gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = \
         create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.gripper, config.gripper + 1)
 
@@ -171,7 +171,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     gripper_board_c = sim.getObjectPosition(gripperBoardCorner, visionSensor)
     gripper_position = [-gripper_tvec[0][0], -gripper_tvec[1][0],
                         gripper_tvec[2][0]]
-    sim.setObjectPosition(gripperBoardCorner, visionSensor, gripper_position)
+    sim.setObjectPosition(robot_parent, visionSensor, gripper_position)
 
     yoke_handle_w = sim.getObjectPosition(yoke_handle, -1)
     camera_w = sim.getObjectPosition(visionSensor, -1)

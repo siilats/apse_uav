@@ -19,8 +19,8 @@ capturing:
   moving_car: 10
   frames:
     step: 1
-    start: 1255
-    end: 1255
+    start: 1299
+    end: 1299
   coppelia:
     yoke_board_y: +1.2500e-01
     yoke_board_roll: -180

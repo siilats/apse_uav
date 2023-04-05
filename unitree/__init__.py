@@ -563,6 +563,7 @@ def standard_coppelia_objects(sim):
     tip_world = sim.getObject('/tip_world')
     yoke_world = sim.getObject('/yoke_world')
     base_world = sim.getObject('/base_world')
+    robot_parent = sim.getObject('/robot_parent')
 
     defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     sim.setInt32Param(sim.intparam_idle_fps, 0)
@@ -573,7 +574,7 @@ def standard_coppelia_objects(sim):
 
     return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
         gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
-        yoke_world, base_world, joints, z1_robot
+        yoke_world, base_world, joints, z1_robot, robot_parent
 
 def sort_corners(corners, ids):
     idx = np.argsort(ids.ravel())
