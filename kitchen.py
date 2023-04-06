@@ -4,8 +4,7 @@ import os
 import platform
 import time
 
-if platform.system() == "Linux":
-    import unitree_arm_interface
+
 from cv2 import aruco
 from func_timeout import func_timeout
 
@@ -14,11 +13,15 @@ from zmqRemoteApi import RemoteAPIClient
 
 parser = argparse.ArgumentParser(description='Name of the config file')
 parser.add_argument('--config', type=str,
-                    help='config file', default="two_cars.yaml")
+                    help='config file', default="kitchen.yaml")
 
 args = parser.parse_args()
 
 model = ModelConfig.from_yaml_file(args.config)
+
+if platform.system() == "Linux" and model.setup.use_unitree_arm_interface:
+    import unitree_arm_interface
+
 setup = model.setup
 coppelia_config = model.capturing.coppelia
 draw_settings = setup.draw_settings
@@ -239,7 +242,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     img_name = "image_{}.png".format(k)
     cv2.imwrite("test_video/" + img_name, img)
 
-    if platform.system() != "Linux":
+    if platform.system() != "Linux" or not model.setup.use_unitree_arm_interface:
         continue
     # setup robot
     np.set_printoptions(precision=3, suppress=True)
