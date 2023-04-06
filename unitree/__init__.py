@@ -88,8 +88,8 @@ class SetupConfig:
     show_image: bool
     draw_settings: DrawSettingsConfig
     use_coppelia_sim: bool
-    use_unitree_arm_interface: bool
     reset_sim: bool
+    use_unitree_arm_interface: bool = False
 
 @dataclass
 class ModelConfig:

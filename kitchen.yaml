@@ -54,7 +54,7 @@ capturing:
     gripper_board_yaw: 0
 setup:
   use_coppelia_sim: true
-  use_unitree_arm_interface: false
+  use_unitree_arm_interface: true
   reset_sim: false
   show_image: true
   draw_settings:
