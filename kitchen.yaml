@@ -5,7 +5,7 @@ capturing:
   save_images: false
   use_images: true
   use_video: false
-  coppelia_path: "/kitchen.ttt"
+  coppelia_path: "/kitchen_v3.ttt"
   path_input_images: "coppelia_images"
   path_input_video: "./controltest.mp4"
   marker_length: 0.05
@@ -19,7 +19,7 @@ capturing:
   moving_car: 10
   frames:
     step: 1
-    start: 1299
+    start: 1270
     end: 1299
   coppelia:
     yoke_board_y: +1.2500e-01

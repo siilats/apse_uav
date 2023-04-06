@@ -545,6 +545,23 @@ def relative_position(rvec1, tvec1, rvec2, tvec2):
     composedTvec = composedTvec.reshape((3, 1))
     return composedRvec, composedTvec
 
+def relativePosition(rvec1, tvec1, rvec2, tvec2):
+    rvec1, tvec1 = rvec1.reshape((3, 1)), tvec1.reshape(
+        (3, 1))
+    rvec2, tvec2 = rvec2.reshape((3, 1)), tvec2.reshape((3, 1))
+
+    # Inverse the second marker, the right one in the image
+    invRvec, invTvec = invert_vec(rvec2, tvec2)
+
+    orgRvec, orgTvec = invert_vec(invRvec, invTvec)
+    # print("rvec: ", rvec2, "tvec: ", tvec2, "\n and \n", orgRvec, orgTvec)
+
+    info = cv2.composeRT(rvec1, tvec1, invRvec, invTvec)
+    composedRvec, composedTvec = info[0], info[1]
+
+    composedRvec = composedRvec.reshape((3, 1))
+    composedTvec = composedTvec.reshape((3, 1))
+    return composedRvec, composedTvec
 
 def standard_coppelia_objects(sim):
     visionSensor = sim.getObject('/Vision_sensor')
@@ -564,9 +581,12 @@ def standard_coppelia_objects(sim):
     yoke_world = sim.getObject('/yoke_world')
     base_world = sim.getObject('/base_world')
     robot_parent = sim.getObject('/robot_parent')
+    yoke_parent = sim.getObject('/yoke_parent')
+    forward = sim.getObject('/forward')
+    start = sim.getObject('/forward')
 
-    defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
-    sim.setInt32Param(sim.intparam_idle_fps, 0)
+    #defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
+    #sim.setInt32Param(sim.intparam_idle_fps, 0)
 
     joints = []
     for i in range(6):
@@ -574,7 +594,7 @@ def standard_coppelia_objects(sim):
 
     return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
         gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
-        yoke_world, base_world, joints, z1_robot, robot_parent
+        yoke_world, base_world, joints, z1_robot, robot_parent,yoke_parent, forward, start
 
 def sort_corners(corners, ids):
     idx = np.argsort(ids.ravel())
@@ -583,3 +603,10 @@ def sort_corners(corners, ids):
     ids = ids[idx]
 
     return corners, ids
+
+def waitForMovementExecutedAsync(sim, id_):
+    global executedMovId
+    while executedMovId != id_:
+        s = sim.waitForSignal(id_)
+        if s is True:
+            executedMovId = id_
