@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import numpy
 from dacite import from_dict
 import yaml
 import json
@@ -7,6 +8,8 @@ import numpy as np
 import cv2.aruco as aruco
 from scipy.spatial.transform import Rotation as R
 import cv2
+
+from unitree.data.board_coordinates import BoardCoordinates, BoardType
 
 
 @dataclass
@@ -74,21 +77,21 @@ class CapturingConfig:
 
 @dataclass
 class DrawSettingsConfig:
-    markers: bool
-    marker_axes: bool
-    id_pose_data: bool
-    distance: bool
-    leds: bool
-    lines: bool
-    points: bool
+    markers: bool = False
+    marker_axes: bool = False
+    id_pose_data: bool = False
+    distance: bool = False
+    leds: bool = False
+    lines: bool = False
+    points: bool = False
 
 
 @dataclass
 class SetupConfig:
-    show_image: bool
     draw_settings: DrawSettingsConfig
-    use_coppelia_sim: bool
-    reset_sim: bool
+    show_image: bool = False
+    use_coppelia_sim: bool = False
+    reset_sim: bool = False
     use_unitree_arm_interface: bool = False
 
 @dataclass
@@ -208,7 +211,7 @@ def detectArucoMarkers(gray, parameters):
 
     corners, ids, rejected_img_points = detector.detectMarkers(gray)
 
-    return corners, ids
+    return BoardCoordinates(BoardType.ARUCO, None, None,corners, ids, None)
 
 def getMarkerData(corners, rvec, cx_prev, cy_prev, markerLength):
     #marker centre x and y
@@ -372,7 +375,7 @@ def pick_rvec_wrong(rvecs, tvecs):
 
     return rvectmp, tvectmp
 
-def detect_charuco_board(config, gray, aruco_dict, parameters):
+def detect_charuco_board(config: CapturingConfig, gray: numpy.ndarray, aruco_dict: cv2.aruco.Dictionary, parameters: cv2.aruco.DetectorParameters) -> BoardCoordinates:
     base_board_size = (3, 3)
     marker_len = config.marker_length
     base_board = aruco.CharucoBoard(base_board_size, squareLength=config.square_len,
@@ -398,7 +401,7 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
 
     base_corners, base_ids, corners, ids = base_detector.detectBoard(gray)
 
-    return base_corners, base_ids, corners, ids, base_board
+    return BoardCoordinates(BoardType.CHARUCO, base_corners, base_ids, corners, ids, base_board)
 
 
 def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_id, end_id):
@@ -422,13 +425,13 @@ def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_i
 
     return yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board
 
-def matchImagePointsforcharuco(charuco_corners, charuco_ids, base_board):
+def match_image_charuco_points(charuco_board: BoardCoordinates):
     base_obj_pts = []
     base_img_pts = []
-    for i in range(0, len(charuco_ids)):
-        index = charuco_ids[i]
-        base_obj_pts.append(base_board.getChessboardCorners()[index])
-        base_img_pts.append(charuco_corners[i])
+    for i in range(0, len(charuco_board.base_ids)):
+        index = charuco_board.base_ids[i]
+        base_obj_pts.append(charuco_board.base_board.getChessboardCorners()[index])
+        base_img_pts.append(charuco_board.base_corners[i])
 
     base_obj_pts = np.array(base_obj_pts)
     base_img_pts = np.array(base_img_pts)

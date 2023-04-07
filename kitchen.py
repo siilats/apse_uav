@@ -63,6 +63,7 @@ try:
     sim = func_timeout(3, lambda: client.getObject('sim'))
 except:
     raise IOError("Failed to connect to Coppeliasim, either open it or set setup.use_coppelia_sim to false")
+
 if setup.reset_sim:
     sim.stopSimulation()
     while sim.getSimulationState() != sim.simulation_stopped:
@@ -97,20 +98,20 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
             break
     # convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    base_corners, base_ids, corners, ids, base_board = detect_charuco_board(config, gray, aruco_dict, parameters)
+    charuco_board: BoardCoordinates = detect_charuco_board(config, gray, aruco_dict, parameters)
 
-    if np.all(ids == None) or len(ids) == 0:
+    if charuco_board.is_ids_null_or_zero():
         continue
 
-    cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-    aruco.drawDetectedCornersCharuco(frame, base_corners, base_ids)
+    cv2.aruco.drawDetectedMarkers(frame, charuco_board.corners, charuco_board.ids)
+    aruco.drawDetectedCornersCharuco(frame, charuco_board.base_corners, charuco_board.base_ids)
 
-    corners, ids = sort_corners(corners, ids)
+    charuco_board = charuco_board.sort_corners()
 
-    base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+    base_obj_points, base_img_points = match_image_charuco_points(charuco_board)
     base_flag, base_rvecs, base_tvecs, base_reproj_error = \
         cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
-    obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+    obj_points, img_points = match_image_charuco_points(charuco_board)
 
     #charuco base to set camera position
     base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
@@ -131,7 +132,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     #yoke board to camera
     yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
-        create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
+        create_grid_board(config, aruco_dict, gray, charuco_board.corners, charuco_board.ids, mtx, dist, config.grid_start, config.grid_end)
     yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
         yoke_obj_points, yoke_img_points, mtx, dist,
         flags=cv2.SOLVEPNP_IPPE)
@@ -160,7 +161,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     # sim.setObjectPosition(z1_robot, gripperBoardCorner, [0, 0, 0])
     gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = \
-        create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.gripper, config.gripper + 1)
+        create_grid_board(config, aruco_dict, gray, charuco_board.corners, charuco_board.ids, mtx, dist, config.gripper, config.gripper + 1)
 
     gripper_flag, gripper_rvecs, gripper_tvecs, ggripper_r2 = cv2.solvePnPGeneric(
         gripper_obj_points, gripper_img_points, mtx, dist,
