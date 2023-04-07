@@ -36,12 +36,27 @@ duration = 1000
 lastPos = arm.lowstate.getQ()
 xs = []
 
+last_joint_positions = [1.00508442885053, 1.9130590121429007, -0.9276282860951903, -0.985430726100941, -1.0050844279302438, -0.026222076561718925]
+last_pos = armModel.forwardKinematics(last_joint_positions, 6)
+closest_dist = 10000
+closest_line = 0
+middle_point = file.shape[0] / 2
+
 #read file line by line
 for line in file:
     arm.q = line[1:7]
     T_forward = armModel.forwardKinematics(arm.q, 6)
+    dist = last_pos[0][3] - T_forward[0][3]
     T_forward2 = armModel.forwardKinematics(arm.q + arm.qd, 6)
-    xs.append(T_forward[0,3] - T_forward2[0,3])
+    speed = T_forward2[0,3] - T_forward[0,3]
+
+    if not (line[0] > middle_point and speed < 0.01):
+
+        if dist < closest_dist and dist > 0.05:
+            closest_dist = dist
+            closest_line = line[0]
+
+    xs.append(T_forward2[0,3] - T_forward[0,3])
     print(T_forward[0:3,3])
     arm.qd = line[8:14] # set velocity
     arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))
@@ -54,6 +69,11 @@ for line in file:
 import matplotlib.pyplot as plt
 plt.plot(xs)
 plt.show()
+
+print(closest_dist)
+print(closest_line)
+print(file[int(closest_line)])
+
 
 
 # for i in range(0, duration):

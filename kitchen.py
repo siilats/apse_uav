@@ -187,12 +187,16 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     gripper_parent_coppelia = [gripper_tvec_b2[0][0], gripper_tvec_b2[1][0], gripper_tvec_b2[2][0]]
     sim.setObjectPosition(robot_parent, baseBoardCorner, gripper_parent_coppelia)
 
+    starting_joint_positions = [0.208, 1.392, -0.28, -1.069, 0.194, 0.93]
+    for i in range(6):
+        sim.setJointPosition(joints[i], starting_joint_positions[i])
+
     #robot ik doesnt work from start, move to forward
-    sim.setJointPosition(joints[1], 45 / 180 * np.pi)
-    sim.setJointPosition(joints[2], -45 / 180 * np.pi)
+    # sim.setJointPosition(joints[1], 45 / 180 * np.pi)
+    # sim.setJointPosition(joints[2], -45 / 180 * np.pi)
     #forward2 is 10cm from forward to test that IK doesn't crash
-    forward2 = sim.getObject('/forward2')
-    forward2_w = sim.getObjectPosition(forward2, -1)
+    # forward2 = sim.getObject('/forward2')
+    # forward2_w = sim.getObjectPosition(forward2, -1)
 
     # sim.setObjectPosition(target_handle, -1, forward2_w)
 
@@ -228,6 +232,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     # gripper
     # joint_positions.append(0)
+    move_arm(arm, starting_joint_positions)
     move_arm(arm, joint_positions)
     arm.loopOn()
     arm.startTrack(armState.JOINTCTRL)
