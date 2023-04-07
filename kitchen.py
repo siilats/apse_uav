@@ -143,14 +143,17 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     yoke_parent_bb = sim.getObjectPosition(yoke_parent, baseBoardCorner)
 
+    #step 1
     yoke_parent_coppelia = [yoke_tvec_b2[0][0], yoke_tvec_b2[1][0], yoke_tvec_b2[2][0]]
     sim.setObjectPosition(yoke_parent, baseBoardCorner, yoke_parent_coppelia)
 
+    #step 2
     yoke_joint_w = sim.getJointPosition(yoke_joint1)
     sim.setJointPosition(yoke_joint1, yoke_rvec_b[2][0])
     #once i rotate the joint i know how much the
     # yoke_joint0 needs to move
     # relative to yoke_parent
+    #step 3
     yoke_parent_yb = sim.getObjectPosition(yoke_parent, yokeBoardCorner)
     sim.setObjectPosition(yoke_parent, yoke_parent, yoke_parent_yb)
 
@@ -248,8 +251,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     np.set_printoptions(precision=3, suppress=True)
     arm = unitree_arm_interface.ArmInterface(hasGripper=True)
     ctrlComp = arm._ctrlComp
-    udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
-    ctrlComp.udp = udp
+    #udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
+    #ctrlComp.udp = udp
     armModel = arm._ctrlComp.armModel
     joint_positions = []
 
