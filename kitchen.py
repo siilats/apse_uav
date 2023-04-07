@@ -21,6 +21,7 @@ model = ModelConfig.from_yaml_file(args.config)
 
 if platform.system() == "Linux" and model.setup.use_unitree_arm_interface:
     import unitree_arm_interface
+    armState = unitree_arm_interface.ArmFSMState
 
 setup = model.setup
 coppelia_config = model.capturing.coppelia
@@ -39,7 +40,7 @@ mtx, dist = readCameraParams(config)  # read camera parameters
 if config.use_images:
     k = config.frames.start
     config.frames.end = len(os.listdir(config.path_input_images)) if config.frames.end is None else config.frames.end
-    frame = cv2.imread(config.path_input_images + "/image_%04d.png" % config.frames.start)
+    frame = cv2.imread(config.path_input_images + "/image_%04d.jpg" % config.frames.start)
 elif config.use_video:
     video = cv2.VideoCapture(config.path_input_video)
     k = config.frames.start
@@ -78,7 +79,6 @@ visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoa
 if setup.reset_sim:
     initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, coppelia_config, gripperBoard, tip, yoke_joint0, yoke_joint1)
 
-# sim.handleVisionSensor(visionSensorHandle)
 
 # Run a simulation in stepping mode:
 # client.setStepping(True)
@@ -90,7 +90,7 @@ if setup.reset_sim:
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     # read frame from image or video
     if config.use_images:
-        frame = cv2.imread(config.path_input_images + "/image_%04d.png" % k)
+        frame = cv2.imread(config.path_input_images + "/image_%04d.jpg" % k)
     elif config.use_video:
         ret, frame = video.read()
         if ret == False:
@@ -141,6 +141,8 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     yoke_rvec_b, yoke_tvec_b = relative_position(base_rvec, base_tvec, yoke_rvec, yoke_tvec)
     yoke_rvec_b2, yoke_tvec_b2 = relative_position(yoke_rvec, yoke_tvec,base_rvec, base_tvec, )
 
+    yoke_joint_w = sim.getJointPosition(yoke_joint1)
+    sim.setJointPosition(yoke_joint1, .0)
     yoke_parent_bb = sim.getObjectPosition(yoke_parent, baseBoardCorner)
 
     #step 1
@@ -148,7 +150,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     sim.setObjectPosition(yoke_parent, baseBoardCorner, yoke_parent_coppelia)
 
     #step 2
-    yoke_joint_w = sim.getJointPosition(yoke_joint1)
     sim.setJointPosition(yoke_joint1, yoke_rvec_b[2][0])
     #once i rotate the joint i know how much the
     # yoke_joint0 needs to move
@@ -187,13 +188,13 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     sim.setObjectPosition(robot_parent, baseBoardCorner, gripper_parent_coppelia)
 
     #robot ik doesnt work from start, move to forward
-    sim.setJointPosition(joints[1], 90 / 180 * np.pi)
-    sim.setJointPosition(joints[2], -90 / 180 * np.pi)
+    sim.setJointPosition(joints[1], 45 / 180 * np.pi)
+    sim.setJointPosition(joints[2], -45 / 180 * np.pi)
     #forward2 is 10cm from forward to test that IK doesn't crash
     forward2 = sim.getObject('/forward2')
     forward2_w = sim.getObjectPosition(forward2, -1)
 
-    sim.setObjectPosition(target_handle, -1, forward2_w)
+    # sim.setObjectPosition(target_handle, -1, forward2_w)
 
     simIK, ikEnv, ikGroup, ikElement, simToIkMap, something = create_ik(client, z1_robot, tip, target_handle)
 
@@ -221,16 +222,17 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
 
     # setup robot
-    arm = connect_to_arm()
+    arm = connect_to_arm(model)
 
     joint_positions = joint_positions(sim, joints)
 
     # gripper
     # joint_positions.append(0)
-    move_arm()
+    move_arm(arm, joint_positions)
     arm.loopOn()
-    arm.backToStart()
-    arm.loopOff()
+    arm.startTrack(armState.JOINTCTRL)
+    #arm.backToStart()
+    #arm.loopOff()
 
     if setup.use_coppelia_sim:
         client.step()

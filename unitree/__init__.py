@@ -344,7 +344,7 @@ def pick_rvec(rvecs, tvecs):
 def pick_rvec_board(rvecs, tvecs):
     generic_ang1 = convert_angles(rvecs[0].ravel())
     generic_ang2 = convert_angles(rvecs[1].ravel())
-    if generic_ang1[1] < generic_ang2[1]:
+    if generic_ang1[1] + generic_ang1[2] < generic_ang2[1] + generic_ang2[2]:
         rvectmp = rvecs[0]
         tvectmp = tvecs[0]
     else:
@@ -645,17 +645,19 @@ def sync_ik(simIK, ikEnv, ikGroup):
     return result, flags, precision
 
 def screenshot_from_coppeliasim(sim, visionSensor, k, parameters):
+    sim.handleVisionSensor(visionSensor)
     img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
     img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
     img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
-    corners_new, ids_new = detectArucoMarkers(img, parameters)
-    cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
+    b = detectArucoMarkers(img, parameters)
+    cv2.aruco.drawDetectedMarkers(img, b.corners, b.ids)
     img_name = "image_{}.png".format(k)
     cv2.imwrite("test_video/" + img_name, img)
 
 def connect_to_arm(model):
     if platform.system() != "Linux" or not model.setup.use_unitree_arm_interface:
        return None
+    import unitree_arm_interface
     np.set_printoptions(precision=3, suppress=True)
     arm = unitree_arm_interface.ArmInterface(hasGripper=True)
     ctrlComp = arm._ctrlComp
