@@ -166,10 +166,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # rr2, tt2 = relative_position(rvec[0], tvec[0], rvec[1], tvec[1])
     if np.all(ids != None):
         if config.use_boards:
-            base_obj_points, base_img_points = matchImagePointsforcharuco(board_coordinates.base_corners, board_coordinates.base_ids, board_coordinates.base_board)
+            base_obj_points, base_img_points = match_image_charuco_points(board_coordinates)
             base_flag, base_rvecs, base_tvecs, base_reproj_error = \
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
-            obj_points, img_points = matchImagePointsforcharuco(board_coordinates.base_corners, board_coordinates.base_ids, board_coordinates.base_board)
+            obj_points, img_points = match_image_charuco_points(board_coordinates)
             base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
             cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1, thickness=5)
             # cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1,thickness=5)

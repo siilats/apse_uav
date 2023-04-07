@@ -425,13 +425,13 @@ def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_i
 
     return yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board
 
-def matchImagePointsforcharuco(charuco_corners, charuco_ids, base_board):
+def match_image_charuco_points(charuco_board: BoardCoordinates):
     base_obj_pts = []
     base_img_pts = []
-    for i in range(0, len(charuco_ids)):
-        index = charuco_ids[i]
-        base_obj_pts.append(base_board.getChessboardCorners()[index])
-        base_img_pts.append(charuco_corners[i])
+    for i in range(0, len(charuco_board.base_ids)):
+        index = charuco_board.base_ids[i]
+        base_obj_pts.append(charuco_board.base_board.getChessboardCorners()[index])
+        base_img_pts.append(charuco_board.base_corners[i])
 
     base_obj_pts = np.array(base_obj_pts)
     base_img_pts = np.array(base_img_pts)

@@ -108,10 +108,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     charuco_board = charuco_board.sort_corners()
 
-    base_obj_points, base_img_points = matchImagePointsforcharuco(charuco_board.base_corners, charuco_board.base_ids, charuco_board.base_board)
+    base_obj_points, base_img_points = match_image_charuco_points(charuco_board)
     base_flag, base_rvecs, base_tvecs, base_reproj_error = \
         cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
-    obj_points, img_points = matchImagePointsforcharuco(charuco_board.base_corners, charuco_board.base_ids, charuco_board.base_board)
+    obj_points, img_points = match_image_charuco_points(charuco_board)
 
     #charuco base to set camera position
     base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
