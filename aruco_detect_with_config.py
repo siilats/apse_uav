@@ -5,7 +5,6 @@ import platform
 from cv2 import aruco
 from func_timeout import func_timeout
 from scipy.spatial.transform import Rotation as R
-import unitree_arm_interface
 
 import time
 
@@ -19,6 +18,10 @@ parser.add_argument('--config', type=str,
 args = parser.parse_args()
 
 model = ModelConfig.from_yaml_file(args.config)
+
+if platform.system() == "Linux" and model.setup.use_unitree_arm_interface:
+    import unitree_arm_interface
+
 setup = model.setup
 coppelia_config = model.capturing.coppelia
 draw_settings = setup.draw_settings
@@ -128,30 +131,32 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     #convert image to grayscale and detect Aruco markers
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     if config.use_boards:
-        base_corners, base_ids, corners, ids, base_board = detect_charuco_board(config, gray, aruco_dict, parameters)
-        aruco.drawDetectedCornersCharuco(frame, base_corners, base_ids)
+        board_coordinates = detect_charuco_board(config, gray, aruco_dict, parameters)
+        ids = board_coordinates.ids
+        aruco.drawDetectedCornersCharuco(frame, board_coordinates.base_corners, board_coordinates.base_ids)
     else:
-        corners, ids = detectArucoMarkers(gray, parameters)
+        board_coordinates = detectArucoMarkers(gray, parameters)
+        ids = board_coordinates.ids
 
     if (ids is not None) and len(ids) > 0:
-        cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+        cv2.aruco.drawDetectedMarkers(frame, board_coordinates.corners, ids)
     # write me adaptive grayscale in opencv
     idx = np.argsort(ids.ravel())
-    corner_not_tuple = np.array(corners)[idx]
-    corners = tuple(corner_not_tuple)
+    corner_not_tuple = np.array(board_coordinates.corners)[idx]
+    board_coordinates.corners = tuple(corner_not_tuple)
     ids = ids[idx]
 
     tvec = np.zeros((len(ids),3))
     rvec = np.zeros((len(ids),3))
     for i in range(len(ids)):
         flag, rvecs, tvecs, r2 = cv2.solvePnPGeneric(
-            obj_points2, corners[i], mtx, dist,
+            obj_points2, board_coordinates.corners[i], mtx, dist,
             flags=cv2.SOLVEPNP_IPPE_SQUARE)
         rvectmp, tvectmp = pick_rvec(rvecs, tvecs)
         tvec[i] = tvectmp
         rvec[i] = rvectmp
         #cv2.drawFrameAxes(frame, mtx, dist, rvec[i], tvec[i], 0.02)
-        #cv2.putText(frame, str(ids[i]), (int(corners[i][0][0][0]), int(corners[i][0][0][1])), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
+        #cv2.putText(frame, str(ids[i]), (int(charuco_board.corners[i][0][0][0]), int(charuco_board.corners[i][0][0][1])), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
 
     # tt,rr = relative_position(rvec[0], tvec[0], rvec[1], tvec[1])
     # ttc=np.array([-markerLength,-markerLength,0])
@@ -161,10 +166,10 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # rr2, tt2 = relative_position(rvec[0], tvec[0], rvec[1], tvec[1])
     if np.all(ids != None):
         if config.use_boards:
-            base_obj_points, base_img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+            base_obj_points, base_img_points = match_image_charuco_points(board_coordinates)
             base_flag, base_rvecs, base_tvecs, base_reproj_error = \
                 cv2.solvePnPGeneric(base_obj_points, base_img_points, mtx, dist, flags=cv2.SOLVEPNP_IPPE)
-            obj_points, img_points = matchImagePointsforcharuco(base_corners, base_ids, base_board)
+            obj_points, img_points = match_image_charuco_points(board_coordinates)
             base_rvec, base_tvec = pick_rvec_board(base_rvecs, base_tvecs)
             cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1, thickness=5)
             # cv2.drawFrameAxes(frame, mtx, dist, base_rvec, base_tvec, 1,thickness=5)
@@ -182,7 +187,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                     sim.setObjectPosition(visionSensor, baseBoardCorner, camera_location_coppelia)
 
             yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board = \
-                create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, config.grid_start, config.grid_end)
+                create_grid_board(config, aruco_dict, gray, board_coordinates.corners, ids, mtx, dist, config.grid_start, config.grid_end)
             yoke_flag, yoke_rvecs, yoke_tvecs, yoke_r2 = cv2.solvePnPGeneric(
                 yoke_obj_points, yoke_img_points, mtx, dist,
                 flags=cv2.SOLVEPNP_IPPE)
@@ -209,7 +214,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
 
             gripper_board_corners, gripper_obj_points, gripper_img_points, gripper_board = create_grid_board(config, aruco_dict,
-                                                            gray, corners, ids,mtx, dist, config.gripper, config.gripper+1)
+                                                                                                             gray, board_coordinates.corners, ids, mtx, dist, config.gripper, config.gripper + 1)
             gripper_flag, gripper_rvecs, gripper_tvecs, ggripper_r2 = cv2.solvePnPGeneric(
                 gripper_obj_points, gripper_img_points, mtx, dist,
                 flags=cv2.SOLVEPNP_IPPE)
@@ -259,7 +264,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
                 img_name = "image_{}.png".format(k)
                 cv2.imwrite("test_video/" + img_name, img)
 
-                if platform.system() == "Linux":
+                if platform.system() == "Linux" and model.setup.use_unitree_arm_interface:
                     # setup robot
                     np.set_printoptions(precision=3, suppress=True)
                     arm = unitree_arm_interface.ArmInterface(hasGripper=True)

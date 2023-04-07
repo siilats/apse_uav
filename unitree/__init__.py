@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-
+import platform
+import time
+import numpy
 from dacite import from_dict
 import yaml
 import json
@@ -7,6 +9,8 @@ import numpy as np
 import cv2.aruco as aruco
 from scipy.spatial.transform import Rotation as R
 import cv2
+
+from unitree.data.board_coordinates import BoardCoordinates, BoardType
 
 
 @dataclass
@@ -74,21 +78,21 @@ class CapturingConfig:
 
 @dataclass
 class DrawSettingsConfig:
-    markers: bool
-    marker_axes: bool
-    id_pose_data: bool
-    distance: bool
-    leds: bool
-    lines: bool
-    points: bool
+    markers: bool = False
+    marker_axes: bool = False
+    id_pose_data: bool = False
+    distance: bool = False
+    leds: bool = False
+    lines: bool = False
+    points: bool = False
 
 
 @dataclass
 class SetupConfig:
-    show_image: bool
     draw_settings: DrawSettingsConfig
-    use_coppelia_sim: bool
-    reset_sim: bool
+    show_image: bool = False
+    use_coppelia_sim: bool = False
+    reset_sim: bool = False
     use_unitree_arm_interface: bool = False
 
 @dataclass
@@ -208,7 +212,7 @@ def detectArucoMarkers(gray, parameters):
 
     corners, ids, rejected_img_points = detector.detectMarkers(gray)
 
-    return corners, ids
+    return BoardCoordinates(BoardType.ARUCO, None, None,corners, ids, None)
 
 def getMarkerData(corners, rvec, cx_prev, cy_prev, markerLength):
     #marker centre x and y
@@ -372,7 +376,7 @@ def pick_rvec_wrong(rvecs, tvecs):
 
     return rvectmp, tvectmp
 
-def detect_charuco_board(config, gray, aruco_dict, parameters):
+def detect_charuco_board(config: CapturingConfig, gray: numpy.ndarray, aruco_dict: cv2.aruco.Dictionary, parameters: cv2.aruco.DetectorParameters) -> BoardCoordinates:
     base_board_size = (3, 3)
     marker_len = config.marker_length
     base_board = aruco.CharucoBoard(base_board_size, squareLength=config.square_len,
@@ -398,7 +402,7 @@ def detect_charuco_board(config, gray, aruco_dict, parameters):
 
     base_corners, base_ids, corners, ids = base_detector.detectBoard(gray)
 
-    return base_corners, base_ids, corners, ids, base_board
+    return BoardCoordinates(BoardType.CHARUCO, base_corners, base_ids, corners, ids, base_board)
 
 
 def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_id, end_id):
@@ -422,13 +426,13 @@ def create_grid_board(config, aruco_dict, gray, corners, ids, mtx, dist, start_i
 
     return yoke_board_corners, yoke_obj_points, yoke_img_points, yoke_board
 
-def matchImagePointsforcharuco(charuco_corners, charuco_ids, base_board):
+def match_image_charuco_points(charuco_board: BoardCoordinates):
     base_obj_pts = []
     base_img_pts = []
-    for i in range(0, len(charuco_ids)):
-        index = charuco_ids[i]
-        base_obj_pts.append(base_board.getChessboardCorners()[index])
-        base_img_pts.append(charuco_corners[i])
+    for i in range(0, len(charuco_board.base_ids)):
+        index = charuco_board.base_ids[i]
+        base_obj_pts.append(charuco_board.base_board.getChessboardCorners()[index])
+        base_img_pts.append(charuco_board.base_corners[i])
 
     base_obj_pts = np.array(base_obj_pts)
     base_img_pts = np.array(base_img_pts)
@@ -498,15 +502,19 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectPosition(visionSensor, -1, forward_position)
 
     # read 6 joints of the robot
-    joints = []
+    joints = refresh_joints(sim)
     for i in range(6):
-        joints.append(sim.getObject('/joint%d' % (i + 1)))
         if i + 1 == 2:
             sim.setJointPosition(joints[i], 90 / 180 * np.pi)
         elif i + 1 == 3:
             sim.setJointPosition(joints[i], -90 / 180 * np.pi)
         else:
             sim.setJointPosition(joints[i], 0)
+def refresh_joints(sim):
+    joints = []
+    for i in range(6):
+        joints.append(sim.getObject('/joint%d' % (i + 1)))
+    return joints
 
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
@@ -589,9 +597,7 @@ def standard_coppelia_objects(sim):
     #defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     #sim.setInt32Param(sim.intparam_idle_fps, 0)
 
-    joints = []
-    for i in range(6):
-        joints.append(sim.getObject('/joint%d' % (i + 1)))
+    joints = refresh_joints(sim)
 
     return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
         gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
@@ -611,3 +617,79 @@ def waitForMovementExecutedAsync(sim, id_):
         s = sim.waitForSignal(id_)
         if s is True:
             executedMovId = id_
+
+
+def create_ik(client, z1_robot, tip, target_handle):
+    simIK = client.getObject('simIK')
+    ikEnv = simIK.createEnvironment()
+    ikGroup = simIK.createIkGroup(ikEnv)
+    dampingFactor = -1.010000
+    maxIterations = 49
+    method = simIK.method_pseudo_inverse
+    if dampingFactor > -1:
+        method = simIK.method_damped_least_squares
+    constraint = simIK.constraint_pose
+    simIK.setIkGroupCalculation(ikEnv, ikGroup, method, dampingFactor, maxIterations)
+    ikElement, simToIkMap, something = simIK.addElementFromScene(ikEnv, ikGroup,
+                                                                 z1_robot, tip, target_handle,
+                                                                 constraint)
+
+    return simIK, ikEnv, ikGroup, ikElement, simToIkMap, something
+
+def sync_ik(simIK, ikEnv, ikGroup):
+    # ikOptions={syncWorlds: true, allowError: false}
+    result, flags, precision = simIK.handleGroup(ikEnv, ikGroup)
+    if result != simIK.result_success:
+        print('IK failed2: ' + simIK.getFailureDescription(flags))
+    simIK.syncToSim(ikEnv, [ikGroup])
+    return result, flags, precision
+
+def screenshot_from_coppeliasim(sim, visionSensor, k, parameters):
+    img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
+    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+    corners_new, ids_new = detectArucoMarkers(img, parameters)
+    cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
+    img_name = "image_{}.png".format(k)
+    cv2.imwrite("test_video/" + img_name, img)
+
+def connect_to_arm(model):
+    if platform.system() != "Linux" or not model.setup.use_unitree_arm_interface:
+       return None
+    np.set_printoptions(precision=3, suppress=True)
+    arm = unitree_arm_interface.ArmInterface(hasGripper=True)
+    ctrlComp = arm._ctrlComp
+    # udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
+    # ctrlComp.udp = udp
+    # Passive Mode and Calibration
+    armState = unitree_arm_interface.ArmFSMState
+    arm.loopOn()
+    arm.setWait(True)
+    arm.setFsm(armState.PASSIVE)
+    arm.calibration()
+    arm.loopOff()
+    arm.setFsmLowcmd()
+    return arm
+
+
+def joint_positions(sim, joints):
+    joint_positions = []
+    for i in range(6):
+        joint_positions.append(sim.getJointPosition(joints[i]))
+    return joint_positions
+
+def move_arm(arm, joint_positions):
+    if arm is None:
+        return
+    duration = 1000
+    lastPos = arm.lowstate.getQ()
+    targetPos = np.array(joint_positions)  # forward
+    armModel = arm._ctrlComp.armModel
+    for i in range(0, duration):
+        arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
+        arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
+        arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))  # set torque
+        arm.gripperQ = -1 * (i / duration)
+        arm.sendRecv()  # udp connection
+        # print(arm.lowstate.getQ())
+        time.sleep(arm._ctrlComp.dt)
