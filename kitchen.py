@@ -86,7 +86,6 @@ if setup.reset_sim:
 # client.step()
 
 
-
 # iterate over frames
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     # read frame from image or video
@@ -183,38 +182,22 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     gripper_board_bb = sim.getObjectPosition(gripperBoardCorner, baseBoardCorner)
     robot_parent_bb = sim.getObjectPosition(robot_parent, baseBoardCorner)
 
+    #step 1
     gripper_parent_coppelia = [gripper_tvec_b2[0][0], gripper_tvec_b2[1][0], gripper_tvec_b2[2][0]]
     sim.setObjectPosition(robot_parent, baseBoardCorner, gripper_parent_coppelia)
 
     #robot ik doesnt work from start, move to forward
     sim.setJointPosition(joints[1], 90 / 180 * np.pi)
     sim.setJointPosition(joints[2], -90 / 180 * np.pi)
+    #forward2 is 10cm from forward to test that IK doesn't crash
     forward2 = sim.getObject('/forward2')
     forward2_w = sim.getObjectPosition(forward2, -1)
 
     sim.setObjectPosition(target_handle, -1, forward2_w)
 
-    simIK = client.getObject('simIK')
-    ikEnv = simIK.createEnvironment()
-    ikGroup = simIK.createIkGroup(ikEnv)
-    dampingFactor = 0.010000
-    maxIterations = 50
-    method = simIK.method_pseudo_inverse
-    if dampingFactor > 0:
-        method = simIK.method_damped_least_squares
-    constraint = simIK.constraint_pose
+    simIK, ikEnv, ikGroup, ikElement, simToIkMap, something = create_ik(client, z1_robot, tip, target_handle)
 
-    simIK.setIkGroupCalculation(ikEnv, ikGroup, method, dampingFactor,maxIterations)
-    ikElement, simToIkMap, something = simIK.addElementFromScene(ikEnv, ikGroup,
-                                                        z1_robot, tip, target_handle,
-                                                        constraint)
-
-    # ikOptions={syncWorlds: true, allowError: false}
-    result,  flags,  precision = simIK.handleGroup(ikEnv, ikGroup)
-    if result != simIK.result_success:
-        print('IK failed2: ' + simIK.getFailureDescription(flags))
-
-    simIK.syncToSim(ikEnv,[ikGroup])
+    result, flags, precision = sync_ik(simIK, ikEnv, ikGroup)
 
     # ik_target = '/IK'
     # robotBaseHandle = sim.getObject(ik_target)
@@ -222,7 +205,6 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # sim.callScriptFunction('handleIK', scriptHandle)
 
 
-    tip_rb = sim.getObjectPosition(tip_world, base_world)
     yoke_rb = sim.getObjectPosition(yoke_world, base_world)
     yoke_rb_ori = sim.getObjectOrientation(yoke_world, base_world)
     yoke_rb_pose = sim.getObjectPose(yoke_world, base_world)
@@ -233,56 +215,19 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     # make sure all coordinates are in robot base so i can send them to the real robot
     sim.setObjectPose(target_handle, base_world, yoke_rb_pose_90)
     # sim.setObjectPose(target_handle, base_world, start_pose)
-    result, flags, precision = simIK.handleGroup(ikEnv, ikGroup)
-    if result != simIK.result_success:
-        print('IK failed2: ' + simIK.getFailureDescription(flags))
+    result, flags, precision = sync_ik(simIK, ikEnv, ikGroup)
 
-    simIK.syncToSim(ikEnv, [ikGroup])
-    img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
-    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
-    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
-    corners_new, ids_new = detectArucoMarkers(img, parameters)
-    cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
-    img_name = "image_{}.png".format(k)
-    cv2.imwrite("test_video/" + img_name, img)
+    screenshot_from_coppeliasim(sim, visionSensor, k, parameters)
 
-    if platform.system() != "Linux" or not model.setup.use_unitree_arm_interface:
-        continue
+
     # setup robot
-    np.set_printoptions(precision=3, suppress=True)
-    arm = unitree_arm_interface.ArmInterface(hasGripper=True)
-    ctrlComp = arm._ctrlComp
-    #udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
-    #ctrlComp.udp = udp
-    armModel = arm._ctrlComp.armModel
-    joint_positions = []
+    arm = connect_to_arm()
 
-    # Passive Mode and Calibration
-    armState = unitree_arm_interface.ArmFSMState
-    arm.loopOn()
-    arm.setWait(True)
-    arm.setFsm(armState.PASSIVE)
-    arm.calibration()
-    arm.loopOff()
-    arm.setFsmLowcmd()
-
-    for i in range(6):
-        joint_positions.append(sim.getJointPosition(joints[i]))
+    joint_positions = joint_positions(sim, joints)
 
     # gripper
     # joint_positions.append(0)
-    duration = 1000
-    lastPos = arm.lowstate.getQ()
-    targetPos = np.array(joint_positions)  # forward
-
-    for i in range(0, duration):
-        arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
-        arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
-        arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))  # set torque
-        arm.gripperQ = -1 * (i / duration)
-        arm.sendRecv()  # udp connection
-        # print(arm.lowstate.getQ())
-        time.sleep(arm._ctrlComp.dt)
+    move_arm()
     arm.loopOn()
     arm.backToStart()
     arm.loopOff()

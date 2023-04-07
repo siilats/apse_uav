@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-
+import platform
+import time
 import numpy
 from dacite import from_dict
 import yaml
@@ -501,15 +502,19 @@ def initial_coppelia(sim, baseBoard, yokeBoard, visionSensor, cc, gripperBoard, 
     sim.setObjectPosition(visionSensor, -1, forward_position)
 
     # read 6 joints of the robot
-    joints = []
+    joints = refresh_joints(sim)
     for i in range(6):
-        joints.append(sim.getObject('/joint%d' % (i + 1)))
         if i + 1 == 2:
             sim.setJointPosition(joints[i], 90 / 180 * np.pi)
         elif i + 1 == 3:
             sim.setJointPosition(joints[i], -90 / 180 * np.pi)
         else:
             sim.setJointPosition(joints[i], 0)
+def refresh_joints(sim):
+    joints = []
+    for i in range(6):
+        joints.append(sim.getObject('/joint%d' % (i + 1)))
+    return joints
 
 def obj_points_square(markerLength):
     obj_points = np.array([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
@@ -592,9 +597,7 @@ def standard_coppelia_objects(sim):
     #defaultIdleFps = sim.getInt32Param(sim.intparam_idle_fps)
     #sim.setInt32Param(sim.intparam_idle_fps, 0)
 
-    joints = []
-    for i in range(6):
-        joints.append(sim.getObject('/joint%d' % (i + 1)))
+    joints = refresh_joints(sim)
 
     return visionSensor, baseBoard, baseBoardCorner, yokeBoard, yokeBoardCorner, gripperBoard, \
         gripperBoardCorner, tip, yoke_joint0, yoke_joint1, yoke_handle, target_handle, tip_world, \
@@ -614,3 +617,79 @@ def waitForMovementExecutedAsync(sim, id_):
         s = sim.waitForSignal(id_)
         if s is True:
             executedMovId = id_
+
+
+def create_ik(client, z1_robot, tip, target_handle):
+    simIK = client.getObject('simIK')
+    ikEnv = simIK.createEnvironment()
+    ikGroup = simIK.createIkGroup(ikEnv)
+    dampingFactor = -1.010000
+    maxIterations = 49
+    method = simIK.method_pseudo_inverse
+    if dampingFactor > -1:
+        method = simIK.method_damped_least_squares
+    constraint = simIK.constraint_pose
+    simIK.setIkGroupCalculation(ikEnv, ikGroup, method, dampingFactor, maxIterations)
+    ikElement, simToIkMap, something = simIK.addElementFromScene(ikEnv, ikGroup,
+                                                                 z1_robot, tip, target_handle,
+                                                                 constraint)
+
+    return simIK, ikEnv, ikGroup, ikElement, simToIkMap, something
+
+def sync_ik(simIK, ikEnv, ikGroup):
+    # ikOptions={syncWorlds: true, allowError: false}
+    result, flags, precision = simIK.handleGroup(ikEnv, ikGroup)
+    if result != simIK.result_success:
+        print('IK failed2: ' + simIK.getFailureDescription(flags))
+    simIK.syncToSim(ikEnv, [ikGroup])
+    return result, flags, precision
+
+def screenshot_from_coppeliasim(sim, visionSensor, k, parameters):
+    img, resX, resY = sim.getVisionSensorCharImage(visionSensor)
+    img = np.frombuffer(img, dtype=np.uint8).reshape(resY, resX, 3)
+    img = cv2.flip(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 0)
+    corners_new, ids_new = detectArucoMarkers(img, parameters)
+    cv2.aruco.drawDetectedMarkers(img, corners_new, ids_new)
+    img_name = "image_{}.png".format(k)
+    cv2.imwrite("test_video/" + img_name, img)
+
+def connect_to_arm(model):
+    if platform.system() != "Linux" or not model.setup.use_unitree_arm_interface:
+       return None
+    np.set_printoptions(precision=3, suppress=True)
+    arm = unitree_arm_interface.ArmInterface(hasGripper=True)
+    ctrlComp = arm._ctrlComp
+    # udp = unitree_arm_interface.UDPPort(IP="127.0.0.1", toPort=8071, ownPort=8072)
+    # ctrlComp.udp = udp
+    # Passive Mode and Calibration
+    armState = unitree_arm_interface.ArmFSMState
+    arm.loopOn()
+    arm.setWait(True)
+    arm.setFsm(armState.PASSIVE)
+    arm.calibration()
+    arm.loopOff()
+    arm.setFsmLowcmd()
+    return arm
+
+
+def joint_positions(sim, joints):
+    joint_positions = []
+    for i in range(6):
+        joint_positions.append(sim.getJointPosition(joints[i]))
+    return joint_positions
+
+def move_arm(arm, joint_positions):
+    if arm is None:
+        return
+    duration = 1000
+    lastPos = arm.lowstate.getQ()
+    targetPos = np.array(joint_positions)  # forward
+    armModel = arm._ctrlComp.armModel
+    for i in range(0, duration):
+        arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
+        arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
+        arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))  # set torque
+        arm.gripperQ = -1 * (i / duration)
+        arm.sendRecv()  # udp connection
+        # print(arm.lowstate.getQ())
+        time.sleep(arm._ctrlComp.dt)
