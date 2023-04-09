@@ -674,13 +674,14 @@ def connect_to_arm(model):
     return arm
 
 
-def joint_positions(sim, joints):
+def get_joint_positions(sim, joints):
     joint_positions = []
     for i in range(6):
         joint_positions.append(sim.getJointPosition(joints[i]))
     return joint_positions
 
-def move_arm(arm, joint_positions):
+def move_arm(arm, joint_positions, gripper=None):
+    # gripper: -1 is open, 0 is close
     if arm is None:
         return
     duration = 1000
@@ -691,7 +692,63 @@ def move_arm(arm, joint_positions):
         arm.q = lastPos * (1 - i / duration) + targetPos * (i / duration)  # set position
         arm.qd = (targetPos - lastPos) / (duration * 0.002)  # set velocity
         arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6))  # set torque
-        arm.gripperQ = -1 * (i / duration)
+        if gripper is not None:
+            arm.gripperQ = gripper * (i / duration)
         arm.sendRecv()  # udp connection
         # print(arm.lowstate.getQ())
         time.sleep(arm._ctrlComp.dt)
+
+def move_gripper(arm, gripper):
+    arm.gripperQ = gripper
+    arm.sendRecv()
+    time.sleep(arm._ctrlComp.dt)
+
+def draw_circle(sim, yoke_joint1, yoke_handle, target_handle, joints):
+    starting_angle = 0.026
+    stops = np.zeros((10, 15))
+    old_positions = [0] * 6
+    for i in range(10): # It will turn 10 times
+        # Rotate yoke joint 1
+        sim.setJointPosition(yoke_joint1, starting_angle - (i * np.pi / 18))
+
+        yoke_handle_pos = sim.getObjectPosition(yoke_handle, -1)
+        sim.setObjectPosition(target_handle, -1, yoke_handle_pos)
+
+        target_rot = sim.getObjectOrientation(target_handle, -1)
+        joint_rot = sim.getJointPosition(yoke_joint1)
+        target_rot[1] = -joint_rot
+        sim.setObjectOrientation(target_handle, -1, target_rot)
+
+        joint_positions = get_joint_positions(sim, joints)
+        joint_speeds = []
+        for a in range(len(joint_positions)):
+            joint_speeds = (joint_positions[a] - old_positions[a]) * 250
+
+        old_positions = joint_positions
+        stops[i, 0] = i
+        stops[i, 1:7] = joint_positions
+        stops[i, 8:14] = joint_speeds
+
+    return stops
+
+def create_traj(stops, movement_duration=1): #Movement duration is in seconds
+    hertz = 250 * movement_duration
+    n_rows = (stops.shape[0] - 1) * hertz
+    n_cols = stops.shape[1]
+    traj = np.zeros((n_rows, n_cols))
+    for i in range(stops.shape[0] - 1):
+        # Compute the differences column by column
+        diffs = stops[i + 1] - stops[i]
+        # Iterate over the 50 new rows between these two rows
+        for j in range(hertz):
+            # Compute the intermediate values using linear interpolation
+            t = float(j) / hertz
+            interp_vals = stops[i] + t * diffs
+            # Add the new row to the new matrix
+            index = i * hertz + j
+            traj[index] = interp_vals
+    # Add the last row from the original matrix
+    traj[-1] = stops[-1]
+
+    return traj
+

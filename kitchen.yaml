@@ -20,7 +20,7 @@ capturing:
   frames:
     step: 1
     start: 1271
-    end: 1271
+    end: 1272
   coppelia:
     yoke_board_y: +1.2500e-01
     yoke_board_roll: -180

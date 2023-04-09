@@ -4,6 +4,8 @@ import os
 import platform
 import time
 
+import numpy as np
+from sklearn.preprocessing import normalize
 
 from cv2 import aruco
 from func_timeout import func_timeout
@@ -87,6 +89,11 @@ if setup.reset_sim:
 
 
 # iterate over frames
+started = False
+
+
+
+
 while k <= config.frames.end and (config.use_images or (config.use_video and video.isOpened())):
     # read frame from image or video
     if config.use_images:
@@ -142,6 +149,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     yoke_rvec_b2, yoke_tvec_b2 = relative_position(yoke_rvec, yoke_tvec,base_rvec, base_tvec, )
 
     yoke_joint_w = sim.getJointPosition(yoke_joint1)
+    old_angle = sim.getJointPosition(yoke_joint1)
     sim.setJointPosition(yoke_joint1, .0)
     yoke_parent_bb = sim.getObjectPosition(yoke_parent, baseBoardCorner)
 
@@ -187,7 +195,7 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
     gripper_parent_coppelia = [gripper_tvec_b2[0][0], gripper_tvec_b2[1][0], gripper_tvec_b2[2][0]]
     sim.setObjectPosition(robot_parent, baseBoardCorner, gripper_parent_coppelia)
 
-    starting_joint_positions = [0.208, 1.392, -0.28, -1.069, 0.194, 0.93]
+    starting_joint_positions = [1.497, 1.51, -0.72, -0.654, -1.035, 0.]
     for i in range(6):
         sim.setJointPosition(joints[i], starting_joint_positions[i])
 
@@ -224,18 +232,42 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     screenshot_from_coppeliasim(sim, visionSensor, k, parameters)
 
+    stops = draw_circle(sim, yoke_joint1, yoke_handle, target_handle, joints)
+    traj = create_traj(stops)
+
+    start = np.zeros((2, 15))
+    start[0, 1:7] = [0.00009, 0.00321, -0.00536, -0.06671, 0.00200, 0.00095]
+    start[1] = traj[0]
+    starting_traj = create_traj(start, 3)
+    final_traj = np.vstack((starting_traj, traj))
+
+    np.savetxt("circular_movement.csv", final_traj, delimiter=",")
 
     # setup robot
-    arm = connect_to_arm(model)
+    if not started:
+        arm = connect_to_arm(model)
+        started = True
 
-    joint_positions = joint_positions(sim, joints)
+    joint_positions = get_joint_positions(sim, joints)
 
     # gripper
     # joint_positions.append(0)
-    move_arm(arm, starting_joint_positions)
-    move_arm(arm, joint_positions)
+
+    # Robot rotates the yoke
+    if k == 1272:
+        sim.setJointPosition(yoke_joint1, yoke_rvec_b[2][0])
+        yoke_handle_pos = sim.getObjectPosition(yoke_handle, -1)
+        sim.setObjectPosition(target_handle, -1, yoke_handle_pos)
+        result, flags, precision = sync_ik(simIK, ikEnv, ikGroup)
+        joint_positions = get_joint_positions(sim, joints)
+        move_arm(arm, joint_positions)
+    else:
+        move_arm(arm, starting_joint_positions, -0.6)
+        move_arm(arm, joint_positions, -0.2)
+
     arm.loopOn()
     arm.startTrack(armState.JOINTCTRL)
+    move_gripper(arm, 0)  # Close the gripper
     #arm.backToStart()
     #arm.loopOff()
 
