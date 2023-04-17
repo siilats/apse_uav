@@ -232,7 +232,16 @@ while k <= config.frames.end and (config.use_images or (config.use_video and vid
 
     screenshot_from_coppeliasim(sim, visionSensor, k, parameters)
 
+    sim.setJointPosition(yoke_joint1, 0)
+    yoke_handle_pos = sim.getObjectPosition(yoke_handle, -1)
+    sim.setObjectPosition(target_handle, -1, yoke_handle_pos)
+
+    starting_joint_positions = [1.497, 1.51, -0.72, -0.654, -1.035, 0.]
+    for i in range(6):
+        sim.setJointPosition(joints[i], starting_joint_positions[i])
+
     stops = draw_circle(sim, yoke_joint1, yoke_handle, target_handle, joints)
+    stops[0, 8:14] = [43.633202600357095] * 6
     traj = create_traj(stops)
 
     start = np.zeros((2, 15))
