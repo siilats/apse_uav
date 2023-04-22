@@ -732,7 +732,7 @@ def draw_circle(sim, yoke_joint1, yoke_handle, target_handle, joints):
     return stops
 
 def create_traj(stops, movement_duration=1): #Movement duration is in seconds
-    hertz = 250 * movement_duration
+    hertz = int(250 * movement_duration)
     n_rows = (stops.shape[0] - 1) * hertz
     n_cols = stops.shape[1]
     traj = np.zeros((n_rows, n_cols))

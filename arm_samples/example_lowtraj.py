@@ -14,6 +14,9 @@ args = argParser.parse_args()
 csv = args.csv
 
 file = np.genfromtxt(csv, dtype=float, delimiter=',')
+import matplotlib.pyplot as plt
+plt.plot(file[:,9])
+plt.show()
 
 print("Press ctrl+\ to quit process.")
 

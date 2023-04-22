@@ -23,25 +23,28 @@ arm.setFsmLowcmd()
 
 duration = 1000
 lastPos = arm.lowstate.getQ()
-targetPos = np.array([0.0, 0.5, -0.2, -0.24, 0.0, 0.0]) #forward
+targetPos = np.array([0.0, 1, -1, -0.24, 0.0, 0.0]) #forward
 
 for i in range(0, duration):
     arm.q = lastPos*(1-i/duration) + targetPos*(i/duration)# set position
     arm.qd = (targetPos-lastPos)/(duration*0.002) # set velocity
-    arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6)) # set torque
-    arm.gripperQ = -1*(i/duration)
+    arm.tau = armModel.inverseDynamics(
+        arm.q, arm.qd, np.zeros(6), np.zeros(6)) / 1000# set torque
+    # arm.gripperQ = -1*(i/duration)
     arm.sendRecv()# udp connection
     # print(arm.lowstate.getQ())
     time.sleep(arm._ctrlComp.dt)
 
 targetPos = arm.q
 lastPos = arm.q
+print("middle point")
 
 for i in range(0, duration):
     arm.q = lastPos*(1-i/duration) + targetPos*(i/duration)# set position
     arm.qd = (targetPos-lastPos)/(duration*0.002) # set velocity
-    arm.tau = armModel.inverseDynamics(arm.q, arm.qd, np.zeros(6), np.zeros(6)) # set torque
-    arm.gripperQ = -1*(i/duration)
+    arm.tau = armModel.inverseDynamics(
+        arm.q, arm.qd, np.zeros(6), np.zeros(6)) / 1000 # set torque
+    # arm.gripperQ = -1*(i/duration)
     arm.sendRecv()# udp connection
     # print(arm.lowstate.getQ())
     time.sleep(arm._ctrlComp.dt)
